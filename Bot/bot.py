@@ -10,8 +10,11 @@ CONFIG_FILE = "config.json"
 def load_config():
     if not os.path.exists(CONFIG_FILE):
         return {"users": {}}
-    with open(CONFIG_FILE, "r") as f:
-        return json.load(f)
+    try:
+        with open(CONFIG_FILE, "r") as f:
+            return json.load(f)
+    except:
+        return {"users": {}}
 
 def save_config(data):
     with open(CONFIG_FILE, "w") as f:
@@ -50,7 +53,6 @@ def home():
     config = load_config()
     user = session["user"]
 
-    # สร้าง user ถ้ายังไม่มี
     if user not in config["users"]:
         config["users"][user] = {"password":"1234","token":"","groups":[]}
 
@@ -114,6 +116,7 @@ def home():
 
     HTML = """
     <h2>USER: {{user}}</h2>
+    <a href="/logout">Logout</a><br><br>
 
     <form method="POST" enctype="multipart/form-data">
 
@@ -137,7 +140,7 @@ def home():
     {% endfor %}
 
     <br>
-    <textarea name="msg"></textarea><br><br>
+    <textarea name="msg" placeholder="พิมพ์ข้อความ"></textarea><br><br>
 
     <input type="file" name="file"><br><br>
 
@@ -162,4 +165,6 @@ def logout():
     session.clear()
     return redirect("/login")
 
-app.run(host="0.0.0.0", port=5000, debug=True)
+# 🔥 สำคัญมาก (สำหรับ Railway)
+if __name__ == "__main__":
+    app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 5000)))
