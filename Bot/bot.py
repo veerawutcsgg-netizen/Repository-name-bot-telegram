@@ -2,137 +2,156 @@ from flask import Flask, request, session, redirect, render_template_string
 import json, os, requests
 
 app = Flask(__name__)
-app.secret_key = "secret123"
+app.secret_key = "supersecret"
 
-CONFIG_FILE = "Bot/config.json"
+# 🔥 ใช้ path ปลอดภัย (Railway ใช้ root)
+CONFIG_FILE = "config.json"
+
 
 # ---------------- CONFIG ----------------
 def load_config():
     if not os.path.exists(CONFIG_FILE):
-        return {"users": {"admin": {"password":"1234","token":"","groups":[]}}}
-    with open(CONFIG_FILE,"r") as f:
-        return json.load(f)
+        default = {
+            "users": {
+                "admin": {
+                    "password": "1234",
+                    "token": "",
+                    "groups": []
+                }
+            }
+        }
+        with open(CONFIG_FILE, "w") as f:
+            json.dump(default, f, indent=2)
+        return default
+
+    try:
+        with open(CONFIG_FILE, "r") as f:
+            return json.load(f)
+    except:
+        return {"users": {}}
+
 
 def save_config(data):
-    with open(CONFIG_FILE,"w") as f:
-        json.dump(data,f,indent=2)
+    with open(CONFIG_FILE, "w") as f:
+        json.dump(data, f, indent=2)
+
 
 # ---------------- LOGIN ----------------
-@app.route("/login", methods=["GET","POST"])
+@app.route("/login", methods=["GET", "POST"])
 def login():
     cfg = load_config()
 
-    if request.method=="POST":
+    if request.method == "POST":
         u = request.form.get("user")
         p = request.form.get("pw")
 
         if u in cfg["users"] and cfg["users"][u]["password"] == p:
             session["user"] = u
             return redirect("/")
+
         return "❌ Login Failed"
 
-    return '''
+    return """
     <h2>Login</h2>
     <form method="post">
     <input name="user"><br>
     <input name="pw" type="password"><br>
     <button>Login</button>
     </form>
-    '''
+    """
+
 
 # ---------------- HOME ----------------
-@app.route("/", methods=["GET","POST"])
+@app.route("/", methods=["GET", "POST"])
 def home():
     if "user" not in session:
         return redirect("/login")
 
     cfg = load_config()
     user = session["user"]
-    is_admin = user == "admin"
-
     data = cfg["users"][user]
+    is_admin = user == "admin"
     msg = ""
 
-    if request.method=="POST":
+    if request.method == "POST":
         action = request.form.get("action")
 
-        # -------- ADMIN --------
-        if is_admin:
-            if action == "add_user":
-                u = request.form.get("new_user")
-                p = request.form.get("new_pw")
+        try:
+            # -------- ADMIN --------
+            if is_admin:
+                if action == "add_user":
+                    u = request.form.get("new_user")
+                    p = request.form.get("new_pw")
 
-                if u in cfg["users"]:
-                    msg = "❌ user ซ้ำ"
-                else:
-                    cfg["users"][u] = {"password":p,"token":"","groups":[]}
-                    msg = "✅ เพิ่ม user แล้ว"
+                    if u in cfg["users"]:
+                        msg = "❌ user ซ้ำ"
+                    else:
+                        cfg["users"][u] = {
+                            "password": p,
+                            "token": "",
+                            "groups": []
+                        }
+                        msg = "✅ เพิ่ม user แล้ว"
 
-            elif action == "delete_user":
-                u = request.form.get("del_user")
-                if u != "admin":
-                    cfg["users"].pop(u, None)
+                elif action == "delete_user":
+                    u = request.form.get("del_user")
+                    if u != "admin":
+                        cfg["users"].pop(u, None)
 
-            elif action == "change_user_pw":
-                u = request.form.get("edit_user")
-                pw = request.form.get("edit_pw")
-                if u in cfg["users"]:
-                    cfg["users"][u]["password"] = pw
+                elif action == "change_user_pw":
+                    u = request.form.get("edit_user")
+                    pw = request.form.get("edit_pw")
+                    if u in cfg["users"]:
+                        cfg["users"][u]["password"] = pw
 
-        # -------- USER --------
-        if action == "change_my_pw":
-            data["password"] = request.form.get("mypw")
+            # -------- USER --------
+            if action == "change_my_pw":
+                data["password"] = request.form.get("mypw")
 
-        # -------- TOKEN --------
-        if action == "save_token":
-            data["token"] = request.form.get("token")
+            if action == "save_token":
+                data["token"] = request.form.get("token")
 
-        # -------- GROUP --------
-        if action == "add_group":
-            data["groups"].append({
-                "id": request.form.get("gid"),
-                "name": request.form.get("gname")
-            })
+            if action == "add_group":
+                data["groups"].append({
+                    "id": request.form.get("gid"),
+                    "name": request.form.get("gname")
+                })
 
-        # -------- SEND --------
-        if action == "send":
-            token = data["token"]
-            gids = request.form.getlist("gids")
-            text = request.form.get("msg")
-            mode = request.form.get("mode")
+            # -------- SEND --------
+            if action == "send":
+                token = data.get("token", "")
+                gids = request.form.getlist("gids")
+                text = request.form.get("msg")
 
-            ok = 0
-
-            for g in gids:
-                try:
-                    if mode == "bot":
+                ok = 0
+                for g in gids:
+                    try:
                         requests.post(
                             f"https://api.telegram.org/bot{token}/sendMessage",
-                            data={"chat_id":g,"text":text}
+                            data={"chat_id": g, "text": text},
+                            timeout=5
                         )
-                    else:
-                        # user mode (placeholder)
-                        # แนะนำให้ทำแบบ manual integration จริง
-                        print("User mode send:", g, text)
+                        ok += 1
+                    except:
+                        pass
 
-                    ok += 1
-                except:
-                    pass
+                msg = f"✅ ส่ง {ok} กลุ่ม"
 
-            msg = f"✅ ส่ง {ok} กลุ่ม"
+            save_config(cfg)
 
-        save_config(cfg)
+        except Exception as e:
+            msg = f"❌ ERROR: {str(e)}"
 
     return render_template_string("""
     <h2>USER: {{user}}</h2>
 
     {% if is_admin %}
-    <h3>👑 Manage Users</h3>
+    <h3>Admin Panel</h3>
 
     <form method="post">
-    <input name="new_user" placeholder="user">
-    <input name="new_pw" placeholder="password">
-    <button name="action" value="add_user">Add</button>
+        <input name="new_user" placeholder="user">
+        <input name="new_pw" placeholder="password">
+        <button name="action" value="add_user">Add</button>
     </form>
 
     <hr>
@@ -150,43 +169,38 @@ def home():
     {% endfor %}
     {% endif %}
 
-    <h3>🔒 Change My Password</h3>
+    <h3>Change Password</h3>
     <form method="post">
-    <input name="mypw">
-    <button name="action" value="change_my_pw">Change</button>
+        <input name="mypw">
+        <button name="action" value="change_my_pw">Change</button>
     </form>
 
     <h3>Token</h3>
     <form method="post">
-    <input name="token" value="{{data.token}}">
-    <button name="action" value="save_token">Save</button>
+        <input name="token" value="{{data.token}}">
+        <button name="action" value="save_token">Save</button>
     </form>
 
     <h3>Add Group</h3>
     <form method="post">
-    <input name="gid">
-    <input name="gname">
-    <button name="action" value="add_group">Add</button>
+        <input name="gid" placeholder="Group ID">
+        <input name="gname" placeholder="Name">
+        <button name="action" value="add_group">Add</button>
     </form>
 
     <h3>Send</h3>
     <form method="post">
+        {% for g in data.groups %}
+            <input type="checkbox" name="gids" value="{{g.id}}"> {{g.name}}<br>
+        {% endfor %}
 
-    <select name="mode">
-        <option value="bot">Bot</option>
-        <option value="user">User (manual)</option>
-    </select><br><br>
-
-    {% for g in data.groups %}
-        <input type="checkbox" name="gids" value="{{g.id}}"> {{g.name}}<br>
-    {% endfor %}
-
-    <textarea name="msg"></textarea><br>
-    <button name="action" value="send">Send</button>
+        <textarea name="msg"></textarea><br>
+        <button name="action" value="send">Send</button>
     </form>
 
     <h3>{{msg}}</h3>
-    """, user=user, is_admin=is_admin, cfg=cfg, data=data, msg=msg)
+    """, user=user, cfg=cfg, data=data, is_admin=is_admin, msg=msg)
+
 
 # ---------------- LOGOUT ----------------
 @app.route("/logout")
@@ -194,6 +208,8 @@ def logout():
     session.clear()
     return redirect("/login")
 
-# ---------------- RUN ----------------
+
+# 🔥 สำคัญมาก (Railway fix crash)
 if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=5000)
+    port = int(os.environ.get("PORT", 5000))
+    app.run(host="0.0.0.0", port=port)
