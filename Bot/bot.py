@@ -41,7 +41,7 @@ def login():
     return """
     <style>
     body{background:#0b0f1a;color:white;text-align:center;font-family:sans-serif}
-    .box{margin-top:100px}
+    .box{margin-top:120px}
     input{padding:14px;margin:8px;border-radius:8px;border:none;width:280px}
     button{padding:12px 40px;background:#ffd700;border:none;border-radius:8px;font-size:16px}
     img{width:260px}
@@ -98,7 +98,7 @@ def panel():
 
     <h3>Login UserBot</h3>
     <form method="post" action="/send_code">
-    <input name="phone" value="{session.get("phone","")}" placeholder="+855xxx">
+    <input name="phone" value="{session.get("phone","")}" placeholder="+855xxxxxxxx">
     <button>Send Code</button></form>
 
     <form method="post" action="/verify">
@@ -137,7 +137,7 @@ def save_api():
     save_config(data)
     return redirect("/panel")
 
-# ---------------- USERBOT ---------------- #
+# ---------------- SEND CODE ---------------- #
 @app.route("/send_code", methods=["POST"])
 def send_code():
     user = session["user"]
@@ -153,17 +153,24 @@ def send_code():
 
     try:
         client = TelegramClient(
-            f"{SESSION_DIR}/{user}",
+            f"{SESSION_DIR}/{user}.session",
             int(u["api_id"]),
             u["api_hash"]
         )
+
         client.connect()
+
+        if client.is_user_authorized():
+            return "⚠️ บัญชีนี้ login อยู่แล้ว"
+
         client.send_code_request(phone)
+
+        return redirect("/panel")
+
     except Exception as e:
-        return f"❌ {str(e)}"
+        return f"❌ ERROR: {str(e)}"
 
-    return redirect("/panel")
-
+# ---------------- VERIFY ---------------- #
 @app.route("/verify", methods=["POST"])
 def verify():
     user = session["user"]
@@ -174,23 +181,27 @@ def verify():
     code = request.form["code"]
 
     if not phone:
-        return "❌ กด Send Code ก่อน"
-
-    client = TelegramClient(
-        f"{SESSION_DIR}/{user}",
-        int(u["api_id"]),
-        u["api_hash"]
-    )
-    client.connect()
+        return "❌ กรุณากด Send Code ก่อน"
 
     try:
+        client = TelegramClient(
+            f"{SESSION_DIR}/{user}.session",
+            int(u["api_id"]),
+            u["api_hash"]
+        )
+
+        client.connect()
         client.sign_in(phone, code)
+
+        return redirect("/panel")
+
     except SessionPasswordNeededError:
-        return "❌ มี 2FA"
+        return "❌ บัญชีมี 2FA"
 
-    return redirect("/panel")
+    except Exception as e:
+        return f"❌ ERROR: {str(e)}"
 
-# ---------------- FETCH ---------------- #
+# ---------------- FETCH GROUP ---------------- #
 @app.route("/fetch", methods=["POST"])
 def fetch():
     user = session["user"]
@@ -198,10 +209,11 @@ def fetch():
     u = data["users"][user]
 
     client = TelegramClient(
-        f"{SESSION_DIR}/{user}",
+        f"{SESSION_DIR}/{user}.session",
         int(u["api_id"]),
         u["api_hash"]
     )
+
     client.connect()
 
     groups = []
@@ -214,7 +226,7 @@ def fetch():
 
     return redirect("/panel")
 
-# ---------------- SEND ---------------- #
+# ---------------- SEND MESSAGE ---------------- #
 @app.route("/send", methods=["POST"])
 def send():
     user = session["user"]
@@ -226,7 +238,7 @@ def send():
     file = request.files.get("file")
 
     client = TelegramClient(
-        f"{SESSION_DIR}/{user}",
+        f"{SESSION_DIR}/{user}.session",
         int(u["api_id"]),
         u["api_hash"]
     )
@@ -237,7 +249,7 @@ def send():
     for gid in selected:
         try:
             if file and file.filename:
-                path = "temp"
+                path = "temp_file"
                 file.save(path)
                 client.send_file(int(gid), path, caption=msg)
                 os.remove(path)
@@ -245,11 +257,12 @@ def send():
                 client.send_message(int(gid), msg)
 
             ok += 1
-            time.sleep(random.uniform(1,2))
+            time.sleep(random.uniform(1, 2))
+
         except:
             fail += 1
 
-    return f"<h2>✅ {ok} | ❌ {fail}</h2><a href='/panel'>Back</a>"
+    return f"<h2>✅ ส่งสำเร็จ {ok} | ❌ ล้มเหลว {fail}</h2><a href='/panel'>กลับ</a>"
 
 # ---------------- LOGOUT ---------------- #
 @app.route("/logout")
