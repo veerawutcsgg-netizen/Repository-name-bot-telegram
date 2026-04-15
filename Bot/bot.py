@@ -41,9 +41,9 @@ def login():
     return """
     <style>
     body{background:#0b0f1a;color:white;text-align:center;font-family:sans-serif}
-    input{padding:10px;margin:5px;border-radius:5px;border:none}
-    button{padding:10px 20px;background:#ffd700;border:none;border-radius:5px}
-    img{width:200px;margin-top:50px}
+    input{padding:12px;margin:6px;border-radius:6px;border:none;width:260px}
+    button{padding:10px 30px;background:#ffd700;border:none;border-radius:6px}
+    img{width:220px;margin-top:50px}
     </style>
 
     <img src="/logo">
@@ -73,12 +73,12 @@ def panel():
     <style>
     body{{background:#0b0f1a;color:white;font-family:sans-serif}}
     .box{{max-width:500px;margin:auto}}
-    input,textarea{{width:100%;padding:10px;margin:5px 0;border:none;border-radius:6px}}
-    button{{background:#ffd700;padding:10px;border:none;border-radius:6px;width:100%}}
+    input,textarea{{width:100%;padding:12px;margin:6px 0;border:none;border-radius:6px}}
+    button{{background:#ffd700;padding:12px;border:none;border-radius:6px;width:100%}}
     </style>
 
     <div class="box">
-    <img src="/logo" width="150">
+    <img src="/logo" width="180">
     <h2>👑 USER: {user}</h2>
 
     <h3>🔑 Token</h3>
@@ -86,10 +86,10 @@ def panel():
     <input name="token" value="{u.get("token","")}">
     <button>Save</button></form>
 
-    <h3>UserBot</h3>
+    <h3>UserBot API</h3>
     <form method="post" action="/save_api">
-    <input name="api_id" placeholder="API_ID">
-    <input name="api_hash" placeholder="API_HASH">
+    <input name="api_id" value="{u.get("api_id","")}" placeholder="API_ID">
+    <input name="api_hash" value="{u.get("api_hash","")}" placeholder="API_HASH">
     <button>Save</button></form>
 
     <form method="post" action="/send_code">
@@ -139,12 +139,19 @@ def send_code():
     data = load_config()
     u = data["users"][user]
 
-    phone = request.form["phone"]
-    session["phone"] = phone
+    if not u.get("api_id") or not u.get("api_hash"):
+        return "❌ กรุณาใส่ API ก่อน"
 
-    client = TelegramClient(f"{SESSION_DIR}/{u['session']}", int(u["api_id"]), u["api_hash"])
-    client.connect()
-    client.send_code_request(phone)
+    try:
+        client = TelegramClient(
+            f"{SESSION_DIR}/{u['session']}",
+            int(u["api_id"]),
+            u["api_hash"]
+        )
+        client.connect()
+        client.send_code_request(request.form["phone"])
+    except Exception as e:
+        return f"❌ ERROR: {str(e)}"
 
     return redirect("/panel")
 
@@ -154,11 +161,15 @@ def verify():
     data = load_config()
     u = data["users"][user]
 
-    client = TelegramClient(f"{SESSION_DIR}/{u['session']}", int(u["api_id"]), u["api_hash"])
+    client = TelegramClient(
+        f"{SESSION_DIR}/{u['session']}",
+        int(u["api_id"]),
+        u["api_hash"]
+    )
     client.connect()
 
     try:
-        client.sign_in(session["phone"], request.form["code"])
+        client.sign_in(session.get("phone"), request.form["code"])
     except SessionPasswordNeededError:
         return "2FA Required"
 
@@ -171,7 +182,11 @@ def fetch():
     data = load_config()
     u = data["users"][user]
 
-    client = TelegramClient(f"{SESSION_DIR}/{u['session']}", int(u["api_id"]), u["api_hash"])
+    client = TelegramClient(
+        f"{SESSION_DIR}/{u['session']}",
+        int(u["api_id"]),
+        u["api_hash"]
+    )
     client.connect()
 
     groups = []
@@ -194,7 +209,11 @@ def send():
     selected = request.form.getlist("groups")
     file = request.files.get("file")
 
-    client = TelegramClient(f"{SESSION_DIR}/{u['session']}", int(u["api_id"]), u["api_hash"])
+    client = TelegramClient(
+        f"{SESSION_DIR}/{u['session']}",
+        int(u["api_id"]),
+        u["api_hash"]
+    )
     client.connect()
 
     success = 0
@@ -202,8 +221,8 @@ def send():
 
     for gid in selected:
         try:
-            if file and file.filename != "":
-                path = "temp_upload"
+            if file and file.filename:
+                path = "temp_file"
                 file.save(path)
                 client.send_file(int(gid), path, caption=msg)
                 os.remove(path)
@@ -216,7 +235,7 @@ def send():
         except:
             fail += 1
 
-    return f"<h2>ส่งสำเร็จ {success} กลุ่ม | ล้มเหลว {fail}</h2><a href='/panel'>กลับ</a>"
+    return f"<h2>ส่งสำเร็จ {success} | ล้มเหลว {fail}</h2><a href='/panel'>กลับ</a>"
 
 # ---------------- LOGOUT ---------------- #
 @app.route("/logout")
