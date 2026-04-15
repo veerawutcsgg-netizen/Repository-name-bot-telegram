@@ -23,7 +23,6 @@ def login():
     if request.method == "POST":
         u = request.form.get("user")
         p = request.form.get("pw")
-
         if u in config["users"] and config["users"][u]["password"] == p:
             session["user"] = u
             return redirect("/")
@@ -31,12 +30,11 @@ def login():
 
     return """
     <style>
-    body{background:#000;color:#fff;display:flex;justify-content:center;align-items:center;height:100vh}
+    body{background:#000;color:#fff;display:flex;justify-content:center;align-items:center;height:100vh;font-family:sans-serif}
     .box{background:#111;padding:30px;border-radius:10px;width:300px}
     input{width:100%;padding:10px;margin:10px 0}
     button{width:100%;padding:10px;background:#FFD700;border:none}
     </style>
-
     <div class="box">
     <h2>Login</h2>
     <form method="post">
@@ -66,7 +64,7 @@ def home():
     if request.method == "POST":
         action = request.form.get("action")
 
-        # ---------------- ADMIN ----------------
+        # ---------- ADMIN ----------
         if is_admin:
             if action == "add_user":
                 u = request.form.get("newuser")
@@ -88,7 +86,7 @@ def home():
                 if tu in config["users"]:
                     config["users"][tu]["password"] = np
 
-        # ---------------- USER ----------------
+        # ---------- USER ----------
         if action == "self_pw":
             udata["password"] = request.form.get("newpw")
 
@@ -108,12 +106,10 @@ def home():
             file = request.files.get("file")
 
             ok = 0
-
             for gid in gids:
                 try:
                     if file and file.filename:
                         file.stream.seek(0)
-
                         if "video" in file.mimetype:
                             url=f"https://api.telegram.org/bot{token}/sendVideo"
                             requests.post(url,data={"chat_id":gid,"caption":msg},
@@ -125,95 +121,126 @@ def home():
                     else:
                         url=f"https://api.telegram.org/bot{token}/sendMessage"
                         requests.post(url,data={"chat_id":gid,"text":msg})
-
                     ok+=1
                 except:
                     pass
 
-            result=f"ส่ง {ok} กลุ่ม"
+            result = f"ส่ง {ok} กลุ่ม"
 
         save_config(config)
 
     return render_template_string("""
-    <style>
-    body{background:#000;color:#fff;font-family:sans-serif;padding:20px}
-    .card{background:#111;padding:20px;margin:15px 0;border-radius:10px}
-    input,textarea{width:100%;padding:10px;margin:5px 0;background:#222;color:#fff;border:none}
-    button{background:#FFD700;padding:8px;border:none;margin-top:5px}
-    </style>
+<style>
+body{background:#000;color:#fff;font-family:sans-serif;padding:20px}
+.card{background:#111;padding:20px;margin:15px 0;border-radius:10px}
+input,textarea{width:100%;padding:10px;margin:5px 0;background:#222;color:#fff;border:none}
+button{background:#FFD700;padding:8px;border:none;margin-top:5px}
+.drop{border:2px dashed #FFD700;padding:20px;text-align:center;margin-top:10px}
+img,video{max-width:100%;margin-top:10px}
+</style>
 
-    <h2>USER: {{user}}</h2>
-    <a href="/logout">Logout</a>
+<h2>👑 USER: {{user}}</h2>
+<a href="/logout">Logout</a>
 
-    <div class="card">
-    <h3>Token</h3>
-    <form method="post">
-    <input name="token" value="{{udata.token}}">
-    <button name="action" value="save_token">Save</button>
-    </form>
-    </div>
+<div class="card">
+<h3>Token</h3>
+<form method="post">
+<input name="token" value="{{udata.token}}">
+<button name="action" value="save_token">Save</button>
+</form>
+</div>
 
-    <div class="card">
-    <h3>Add Group</h3>
-    <form method="post">
-    <input name="gid" placeholder="Group ID">
-    <input name="gname" placeholder="Name">
-    <button name="action" value="add_group">Add</button>
-    </form>
-    </div>
+<div class="card">
+<h3>Add Group</h3>
+<form method="post">
+<input name="gid" placeholder="Group ID">
+<input name="gname" placeholder="Name">
+<button name="action" value="add_group">Add</button>
+</form>
+</div>
 
-    {% if is_admin %}
-    <div class="card">
-    <h3>Manage Users</h3>
+{% if is_admin %}
+<div class="card">
+<h3>Manage Users</h3>
 
-    <form method="post">
-    <input name="newuser" placeholder="Username">
-    <input name="newpass" placeholder="Password">
-    <button name="action" value="add_user">Add</button>
-    </form>
+<form method="post">
+<input name="newuser" placeholder="Username">
+<input name="newpass" placeholder="Password">
+<button name="action" value="add_user">Add</button>
+</form>
 
-    <hr>
+<hr>
 
-    {% for u in config.users %}
-        {% if u != "admin" %}
-        <form method="post">
-        <b>{{u}}</b>
-        <input name="target" value="{{u}}" hidden>
-        <input name="newpw_admin" placeholder="New Password">
-        <button name="action" value="admin_pw">Change</button>
-        <button name="action" value="del_user">Delete</button>
-        </form>
-        {% endif %}
-    {% endfor %}
+{% for u in config.users %}
+{% if u != "admin" %}
+<form method="post">
+<b>{{u}}</b>
+<input name="target" value="{{u}}" hidden>
+<input name="newpw_admin" placeholder="New Password">
+<button name="action" value="admin_pw">Change</button>
+<button name="action" value="del_user">Delete</button>
+</form>
+{% endif %}
+{% endfor %}
+</div>
+{% endif %}
 
-    </div>
-    {% endif %}
+<div class="card">
+<h3>Change Password</h3>
+<form method="post">
+<input name="newpw" placeholder="New Password">
+<button name="action" value="self_pw">Change</button>
+</form>
+</div>
 
-    <div class="card">
-    <h3>Change Password</h3>
-    <form method="post">
-    <input name="newpw" placeholder="New Password">
-    <button name="action" value="self_pw">Change</button>
-    </form>
-    </div>
+<div class="card">
+<h3>Send</h3>
+<form method="post" enctype="multipart/form-data">
 
-    <div class="card">
-    <h3>Send</h3>
-    <form method="post" enctype="multipart/form-data">
+<label><input type="checkbox" id="all"> ALL</label><br><br>
 
-    {% for g in udata.groups %}
-        <label><input type="checkbox" name="gids" value="{{g.id}}"> {{g.name}}</label><br>
-    {% endfor %}
+{% for g in udata.groups %}
+<label>
+<input type="checkbox" name="gids" value="{{g.id}}" class="g"> {{g.name}}
+</label><br>
+{% endfor %}
 
-    <textarea name="msg"></textarea>
-    <input type="file" name="file">
+<textarea name="msg" placeholder="Message"></textarea>
 
-    <button name="action" value="send">Send</button>
-    </form>
-    </div>
+<div class="drop" onclick="file.click()">
+ลากไฟล์ หรือคลิกเลือก
+<input type="file" name="file" id="file" hidden onchange="preview(this)">
+</div>
 
-    <h3>{{result}}</h3>
-    """, user=user, udata=udata, config=config, is_admin=is_admin, result=result)
+<img id="img" style="display:none">
+<video id="vid" controls style="display:none"></video>
+
+<button name="action" value="send">Send</button>
+</form>
+</div>
+
+<script>
+document.getElementById("all").addEventListener("change", function(){
+    let checked = this.checked
+    document.querySelectorAll(".g").forEach(cb=>cb.checked=checked)
+})
+
+function preview(f){
+    let file=f.files[0]
+    if(!file)return
+    let url=URL.createObjectURL(file)
+    if(file.type.includes("image")){
+        img.src=url; img.style.display="block"
+        vid.style.display="none"
+    }else{
+        vid.src=url; vid.style.display="block"
+        img.style.display="none"
+    }
+}
+</script>
+
+<h3>{{result}}</h3>
+""", user=user, udata=udata, config=config, is_admin=is_admin, result=result)
 
 @app.route("/logout")
 def logout():
