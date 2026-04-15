@@ -6,6 +6,7 @@ app.secret_key = "supersecret"
 
 CONFIG_FILE = "Bot/config.json"
 
+# ---------------- CONFIG ----------------
 def load_config():
     if not os.path.exists(CONFIG_FILE):
         return {"users": {}}
@@ -26,25 +27,26 @@ def login():
     error = ""
 
     if request.method == "POST":
-        user = request.form.get("user")
-        pw = request.form.get("pw")
+        u = request.form.get("user")
+        p = request.form.get("pw")
 
-        if user in config["users"] and config["users"][user]["password"] == pw:
-            session["user"] = user
+        if u in config["users"] and config["users"][u]["password"] == p:
+            session["user"] = u
             return redirect("/")
         else:
             error = "❌ Login ผิด"
 
     return render_template_string("""
     <style>
-    body{background:#0d0d0d;color:#fff;font-family:sans-serif;display:flex;justify-content:center;align-items:center;height:100vh;font-size:18px;}
-    .box{background:#1a1a1a;padding:30px;border-radius:15px;width:350px;text-align:center;}
-    input{width:100%;padding:12px;margin:8px 0;border-radius:8px;border:none;}
-    button{width:100%;padding:12px;background:gold;border:none;border-radius:8px;}
+    body{background:#0b0b0b;color:#fff;font-family:sans-serif;
+    display:flex;justify-content:center;align-items:center;height:100vh}
+    .box{background:#1a1a1a;padding:40px;border-radius:20px;width:350px;text-align:center}
+    input{width:100%;padding:12px;margin:10px 0;border-radius:10px;border:none}
+    button{width:100%;padding:12px;background:gold;border:none;border-radius:10px;font-weight:bold}
     </style>
 
     <div class="box">
-        <h2>LOGIN</h2>
+        <h2>🚀 BOT PANEL</h2>
         <form method="post">
         <input name="user" placeholder="Username">
         <input name="pw" type="password" placeholder="Password">
@@ -68,32 +70,30 @@ def home():
     if request.method == "POST":
         action = request.form.get("action")
 
-        # ADMIN ONLY
+        # ADMIN
         if action == "add_user" and user == "admin":
             u = request.form.get("new_user")
             p = request.form.get("new_pw")
 
-            if not u or not p:
-                result = "❌ กรอกไม่ครบ"
-            elif u in config["users"]:
+            if u in config["users"]:
                 result = "❌ user ซ้ำ"
             else:
                 config["users"][u] = {"password":p,"token":"","groups":[]}
-                result = f"✅ เพิ่ม {u} สำเร็จ"
+                result = f"✅ เพิ่ม {u}"
 
-        elif action == "change_user_pw" and user == "admin":
-            target = request.form.get("target_user")
-            newpw = request.form.get("newpw")
-            config["users"][target]["password"] = newpw
-            result = f"✅ เปลี่ยนรหัส {target}"
-
-        elif action == "delete_user" and user == "admin":
-            target = request.form.get("target_user")
+        elif action == "del_user" and user == "admin":
+            target = request.form.get("target")
             if target != "admin":
                 config["users"].pop(target)
                 result = f"🗑 ลบ {target}"
 
-        # USER SELF
+        elif action == "edit_pw_admin" and user == "admin":
+            target = request.form.get("target")
+            newpw = request.form.get("newpw")
+            config["users"][target]["password"] = newpw
+            result = f"🔑 เปลี่ยนรหัส {target}"
+
+        # USER
         elif action == "change_pw":
             user_data["password"] = request.form.get("newpw")
             result = "✅ เปลี่ยนรหัสแล้ว"
@@ -107,8 +107,8 @@ def home():
                 "name": request.form.get("gname")
             })
 
-        elif request.form.get("del"):
-            gid = request.form.get("del")
+        elif request.form.get("delg"):
+            gid = request.form.get("delg")
             user_data["groups"] = [g for g in user_data["groups"] if g["id"] != gid]
 
         elif action == "send":
@@ -125,29 +125,30 @@ def home():
                 except:
                     pass
 
-            result = f"ส่งสำเร็จ {ok} กลุ่ม"
+            result = f"🚀 ส่งสำเร็จ {ok} กลุ่ม"
 
         save_config(config)
 
     return render_template_string("""
     <style>
-    body{background:#0d0d0d;color:#fff;font-family:sans-serif;padding:20px;font-size:18px;}
-    .card{background:#1a1a1a;padding:20px;margin:15px 0;border-radius:15px;}
-    input,textarea{width:100%;padding:12px;margin:8px 0;border-radius:8px;border:none;}
-    button{background:gold;border:none;padding:10px;border-radius:8px;margin:3px;}
+    body{background:#0b0b0b;color:#fff;font-family:sans-serif;padding:20px}
+    .card{background:#1a1a1a;padding:20px;border-radius:15px;margin:20px 0}
+    input,textarea{width:100%;padding:12px;margin:8px 0;border-radius:10px;border:none}
+    button{background:gold;border:none;padding:10px;border-radius:10px;margin:5px;font-weight:bold}
+    h2{color:gold}
     </style>
 
-    <h2>👑 USER: {{user}}</h2>
+    <h2>👑 {{user}}</h2>
     <a href="/logout">Logout</a>
 
     {% if user == "admin" %}
     <div class="card">
-    <h3>👑 จัดการ USER</h3>
+    <h3>👑 Manage User</h3>
 
     <form method="post">
     <input name="new_user" placeholder="Username">
     <input name="new_pw" placeholder="Password">
-    <button name="action" value="add_user">➕ Add</button>
+    <button name="action" value="add_user">Add</button>
     </form>
 
     <hr>
@@ -155,24 +156,31 @@ def home():
     {% for u in config["users"] %}
         {% if u != "admin" %}
         <form method="post">
-        <b>{{u}}</b><br>
+        <b>{{u}}</b>
         <input name="newpw" placeholder="New Password">
-        <input type="hidden" name="target_user" value="{{u}}">
-        <button name="action" value="change_user_pw">🔑 เปลี่ยนรหัส</button>
-        <button name="action" value="delete_user">🗑 ลบ</button>
+        <input type="hidden" name="target" value="{{u}}">
+        <button name="action" value="edit_pw_admin">Change PW</button>
+        <button name="action" value="del_user">Delete</button>
         </form>
-        <hr>
         {% endif %}
     {% endfor %}
-
     </div>
     {% endif %}
 
     <div class="card">
-    <h3>🔐 เปลี่ยนรหัสตัวเอง</h3>
+    <h3>🔑 Token</h3>
     <form method="post">
-    <input name="newpw" placeholder="New Password">
-    <button name="action" value="change_pw">Change</button>
+    <input name="token" value="{{user_data.token}}">
+    <button name="action" value="save_token">Save</button>
+    </form>
+    </div>
+
+    <div class="card">
+    <h3>➕ Add Group</h3>
+    <form method="post">
+    <input name="gid" placeholder="Group ID">
+    <input name="gname" placeholder="Name">
+    <button name="action" value="add_group">Add</button>
     </form>
     </div>
 
@@ -180,7 +188,8 @@ def home():
     <h3>📢 Send</h3>
     <form method="post">
     {% for g in user_data.groups %}
-    <label><input type="checkbox" name="gids" value="{{g.id}}"> {{g.name}}</label><br>
+    <label><input type="checkbox" name="gids" value="{{g.id}}"> {{g.name}}</label>
+    <button name="delg" value="{{g.id}}">❌</button><br>
     {% endfor %}
     <textarea name="msg"></textarea>
     <button name="action" value="send">Send</button>
@@ -195,5 +204,6 @@ def logout():
     session.clear()
     return redirect("/login")
 
+# Railway FIX
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 5000)))
