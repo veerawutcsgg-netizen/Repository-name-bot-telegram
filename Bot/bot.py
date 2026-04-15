@@ -1,9 +1,6 @@
 from flask import Flask, request, session, redirect, render_template_string, send_from_directory
 import json, os, requests
 
-# ✅ NEW
-from telethon.sync import TelegramClient
-
 app = Flask(__name__)
 app.secret_key = "supersecretkey"
 
@@ -44,7 +41,60 @@ def login():
         else:
             return "❌ Login ผิด"
 
-    return f"""..."""  # ❗ ไม่แก้ของเดิม
+    return f"""
+    <style>
+    body {{
+        background:#0b0f14;
+        font-family:sans-serif;
+        display:flex;
+        justify-content:center;
+        align-items:center;
+        height:100vh;
+        color:white;
+    }}
+    .box {{
+        background:#111;
+        padding:40px;
+        border-radius:16px;
+        width:340px;
+        text-align:center;
+    }}
+    .logo {{
+        width:220px;
+        margin-bottom:10px;
+        filter: drop-shadow(0 0 15px #00d9ff);
+    }}
+    input {{
+        width:100%;
+        padding:12px;
+        margin:8px 0;
+        border-radius:8px;
+        border:none;
+        background:#222;
+        color:white;
+    }}
+    button {{
+        width:100%;
+        padding:12px;
+        background:gold;
+        border:none;
+        border-radius:8px;
+        cursor:pointer;
+    }}
+    </style>
+
+    <div class="box">
+        <img src="/logo" class="logo">
+        <h2>{APP_NAME}</h2>
+        <h3>🚀 Login</h3>
+
+        <form method="post">
+            <input name="user" placeholder="Username">
+            <input type="password" name="pw" placeholder="Password">
+            <button>Login</button>
+        </form>
+    </div>
+    """
 
 # ---------------- HOME ----------------
 @app.route("/", methods=["GET","POST"])
@@ -55,14 +105,7 @@ def home():
     config = load_config()
     user = session["user"]
 
-    # ✅ เพิ่ม userbot config
-    user_data = config["users"].get(user, {
-        "token":"",
-        "api_id":"",
-        "api_hash":"",
-        "groups":[]
-    })
-
+    user_data = config["users"].get(user, {"token":"","groups":[]})
     result = ""
 
     if request.method == "POST":
@@ -71,11 +114,6 @@ def home():
         if action == "save_token":
             user_data["token"] = request.form.get("token")
 
-        # ✅ NEW save userbot
-        elif action == "save_userbot":
-            user_data["api_id"] = request.form.get("api_id")
-            user_data["api_hash"] = request.form.get("api_hash")
-
         elif action == "add_group":
             user_data["groups"].append({
                 "id": request.form.get("gid"),
@@ -83,72 +121,39 @@ def home():
             })
 
         elif action == "send":
-            token = user_data.get("token")
-            api_id = user_data.get("api_id")
-            api_hash = user_data.get("api_hash")
-
+            token = user_data["token"]
             gids = request.form.getlist("gids")
             msg = request.form.get("msg")
             file = request.files.get("file")
 
             ok = 0
 
-            # ✅ เตรียม userbot (ถ้ามี)
-            client = None
-            if api_id and api_hash:
-                try:
-                    client = TelegramClient("userbot", int(api_id), api_hash)
-                    client.start()
-                except:
-                    client = None
-
             for gid in gids:
                 try:
-                    sent = False
+                    if file and file.filename:
+                        file.stream.seek(0)
 
-                    # -------- BOT --------
-                    if token:
-                        try:
-                            if file and file.filename:
-                                file.stream.seek(0)
-
-                                if "video" in file.mimetype:
-                                    url = f"https://api.telegram.org/bot{token}/sendVideo"
-                                    requests.post(url,
-                                        data={"chat_id": gid, "caption": msg},
-                                        files={"video": file}
-                                    )
-                                else:
-                                    url = f"https://api.telegram.org/bot{token}/sendPhoto"
-                                    requests.post(url,
-                                        data={"chat_id": gid, "caption": msg},
-                                        files={"photo": file}
-                                    )
-                            else:
-                                url = f"https://api.telegram.org/bot{token}/sendMessage"
-                                requests.post(url,
-                                    data={"chat_id": gid, "text": msg}
-                                )
-
-                            sent = True
-                        except:
-                            sent = False
-
-                    # -------- USERBOT --------
-                    if not sent and client:
-                        if file and file.filename:
-                            file.stream.seek(0)
-                            client.send_file(int(gid), file, caption=msg)
+                        if "video" in file.mimetype:
+                            url = f"https://api.telegram.org/bot{token}/sendVideo"
+                            requests.post(url,
+                                data={"chat_id": gid, "caption": msg},
+                                files={"video": file}
+                            )
                         else:
-                            client.send_message(int(gid), msg)
+                            url = f"https://api.telegram.org/bot{token}/sendPhoto"
+                            requests.post(url,
+                                data={"chat_id": gid, "caption": msg},
+                                files={"photo": file}
+                            )
+                    else:
+                        url = f"https://api.telegram.org/bot{token}/sendMessage"
+                        requests.post(url,
+                            data={"chat_id": gid, "text": msg}
+                        )
 
                     ok += 1
-
-                except Exception as e:
-                    print("ERROR:", e)
-
-            if client:
-                client.disconnect()
+                except:
+                    pass
 
             result = f"✅ ส่งสำเร็จ {ok} กลุ่ม"
 
@@ -159,9 +164,9 @@ def home():
     <style>
     body {background:#0b0f14;color:white;font-family:sans-serif;}
     .box {max-width:600px;margin:auto;padding:20px;}
-    .logo {width:200px;display:block;margin:auto;}
+    .logo {width:200px;display:block;margin:auto;filter: drop-shadow(0 0 10px #00d9ff);}
     input,textarea {width:100%;padding:10px;margin:5px 0;border-radius:8px;border:none;background:#222;color:white;}
-    button {background:gold;border:none;padding:10px;border-radius:8px;}
+    button {background:gold;border:none;padding:10px;border-radius:8px;cursor:pointer;}
     </style>
 
     <div class="box">
@@ -172,14 +177,9 @@ def home():
 
         <form method="POST" enctype="multipart/form-data">
 
-        <h3>Token (Bot)</h3>
+        <h3>Token</h3>
         <input name="token" value="{{user_data.token}}">
         <button name="action" value="save_token">Save</button>
-
-        <h3>UserBot</h3>
-        <input name="api_id" placeholder="API_ID" value="{{user_data.api_id}}">
-        <input name="api_hash" placeholder="API_HASH" value="{{user_data.api_hash}}">
-        <button name="action" value="save_userbot">Save UserBot</button>
 
         <h3>Add Group</h3>
         <input name="gid" placeholder="Group ID">
