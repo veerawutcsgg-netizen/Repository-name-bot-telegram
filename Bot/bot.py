@@ -4,59 +4,44 @@ import requests, json, os
 app = Flask(__name__)
 app.secret_key = "supersecret"
 
-CONFIG_FILE = "Bot/config.json"
+CONFIG_FILE = "config.json"
 
-# ---------------- CONFIG ----------------
 def load_config():
     if not os.path.exists(CONFIG_FILE):
-        return {"users": {}}
-    try:
-        with open(CONFIG_FILE, "r") as f:
-            return json.load(f)
-    except:
-        return {"users": {}}
+        return {"users":{"admin":{"password":"1234","token":"","groups":[]}}}
+    with open(CONFIG_FILE,"r") as f:
+        return json.load(f)
 
 def save_config(data):
-    with open(CONFIG_FILE, "w") as f:
-        json.dump(data, f, indent=2)
+    with open(CONFIG_FILE,"w") as f:
+        json.dump(data,f,indent=2)
 
-# ---------------- LOGIN ----------------
 @app.route("/login", methods=["GET","POST"])
 def login():
     config = load_config()
-    error = ""
-
     if request.method == "POST":
-        u = request.form.get("user")
-        p = request.form.get("pw")
-
+        u = request.form["user"]
+        p = request.form["pw"]
         if u in config["users"] and config["users"][u]["password"] == p:
             session["user"] = u
             return redirect("/")
-        else:
-            error = "❌ Login ผิด"
-
-    return render_template_string("""
+    return """
     <style>
-    body{background:#0b0b0b;color:#fff;font-family:sans-serif;
-    display:flex;justify-content:center;align-items:center;height:100vh}
-    .box{background:#1a1a1a;padding:40px;border-radius:20px;width:350px;text-align:center}
+    body{background:#0b0b0b;color:#fff;font-family:sans-serif;display:flex;justify-content:center;align-items:center;height:100vh}
+    .box{background:#1a1a1a;padding:40px;border-radius:20px;width:320px}
     input{width:100%;padding:12px;margin:10px 0;border-radius:10px;border:none}
-    button{width:100%;padding:12px;background:gold;border:none;border-radius:10px;font-weight:bold}
+    button{width:100%;padding:12px;background:gold;border:none;border-radius:10px}
     </style>
-
     <div class="box">
-        <h2>🚀 BOT PANEL</h2>
-        <form method="post">
-        <input name="user" placeholder="Username">
-        <input name="pw" type="password" placeholder="Password">
-        <button>Login</button>
-        </form>
-        <p>{{error}}</p>
+    <h2>LOGIN</h2>
+    <form method="post">
+    <input name="user" placeholder="Username">
+    <input name="pw" type="password" placeholder="Password">
+    <button>Login</button>
+    </form>
     </div>
-    """, error=error)
+    """
 
-# ---------------- MAIN ----------------
 @app.route("/", methods=["GET","POST"])
 def home():
     if "user" not in session:
@@ -70,35 +55,7 @@ def home():
     if request.method == "POST":
         action = request.form.get("action")
 
-        # ADMIN
-        if action == "add_user" and user == "admin":
-            u = request.form.get("new_user")
-            p = request.form.get("new_pw")
-
-            if u in config["users"]:
-                result = "❌ user ซ้ำ"
-            else:
-                config["users"][u] = {"password":p,"token":"","groups":[]}
-                result = f"✅ เพิ่ม {u}"
-
-        elif action == "del_user" and user == "admin":
-            target = request.form.get("target")
-            if target != "admin":
-                config["users"].pop(target)
-                result = f"🗑 ลบ {target}"
-
-        elif action == "edit_pw_admin" and user == "admin":
-            target = request.form.get("target")
-            newpw = request.form.get("newpw")
-            config["users"][target]["password"] = newpw
-            result = f"🔑 เปลี่ยนรหัส {target}"
-
-        # USER
-        elif action == "change_pw":
-            user_data["password"] = request.form.get("newpw")
-            result = "✅ เปลี่ยนรหัสแล้ว"
-
-        elif action == "save_token":
+        if action == "save_token":
             user_data["token"] = request.form.get("token")
 
         elif action == "add_group":
@@ -107,103 +64,139 @@ def home():
                 "name": request.form.get("gname")
             })
 
-        elif request.form.get("delg"):
-            gid = request.form.get("delg")
-            user_data["groups"] = [g for g in user_data["groups"] if g["id"] != gid]
-
         elif action == "send":
             token = user_data["token"]
             gids = request.form.getlist("gids")
             msg = request.form.get("msg")
+            file = request.files.get("file")
 
             ok = 0
             for gid in gids:
                 try:
-                    requests.post(f"https://api.telegram.org/bot{token}/sendMessage",
-                                  data={"chat_id": gid, "text": msg})
+                    if file and file.filename:
+                        file.stream.seek(0)
+
+                        if "video" in file.mimetype:
+                            url = f"https://api.telegram.org/bot{token}/sendVideo"
+                            requests.post(url,
+                                data={"chat_id": gid, "caption": msg},
+                                files={"video": file}
+                            )
+                        else:
+                            url = f"https://api.telegram.org/bot{token}/sendPhoto"
+                            requests.post(url,
+                                data={"chat_id": gid, "caption": msg},
+                                files={"photo": file}
+                            )
+                    else:
+                        url = f"https://api.telegram.org/bot{token}/sendMessage"
+                        requests.post(url,
+                            data={"chat_id": gid, "text": msg}
+                        )
                     ok += 1
                 except:
                     pass
 
-            result = f"🚀 ส่งสำเร็จ {ok} กลุ่ม"
+            result = f"ส่งสำเร็จ {ok} กลุ่ม"
 
         save_config(config)
 
     return render_template_string("""
-    <style>
-    body{background:#0b0b0b;color:#fff;font-family:sans-serif;padding:20px}
-    .card{background:#1a1a1a;padding:20px;border-radius:15px;margin:20px 0}
-    input,textarea{width:100%;padding:12px;margin:8px 0;border-radius:10px;border:none}
-    button{background:gold;border:none;padding:10px;border-radius:10px;margin:5px;font-weight:bold}
-    h2{color:gold}
-    </style>
+<style>
+body{background:#0b0b0b;color:#fff;font-family:sans-serif;padding:20px}
+.card{background:#1a1a1a;padding:20px;border-radius:15px;margin:20px 0}
+input,textarea{width:100%;padding:12px;margin:8px 0;border-radius:10px;border:none}
+button{background:gold;border:none;padding:10px;border-radius:10px}
+.drop{border:2px dashed gold;padding:20px;text-align:center;border-radius:15px;margin-top:10px}
+.preview img,video{max-width:200px;margin-top:10px;border-radius:10px}
+</style>
 
-    <h2>👑 {{user}}</h2>
-    <a href="/logout">Logout</a>
+<h2>USER: {{user}}</h2>
+<a href="/logout">Logout</a>
 
-    {% if user == "admin" %}
-    <div class="card">
-    <h3>👑 Manage User</h3>
+<div class="card">
+<h3>Token</h3>
+<form method="post">
+<input name="token" value="{{user_data.token}}">
+<button name="action" value="save_token">Save</button>
+</form>
+</div>
 
-    <form method="post">
-    <input name="new_user" placeholder="Username">
-    <input name="new_pw" placeholder="Password">
-    <button name="action" value="add_user">Add</button>
-    </form>
+<div class="card">
+<h3>Add Group</h3>
+<form method="post">
+<input name="gid" placeholder="Group ID">
+<input name="gname" placeholder="Name">
+<button name="action" value="add_group">Add</button>
+</form>
+</div>
 
-    <hr>
+<div class="card">
+<h3>Send</h3>
+<form method="post" enctype="multipart/form-data" id="form">
 
-    {% for u in config["users"] %}
-        {% if u != "admin" %}
-        <form method="post">
-        <b>{{u}}</b>
-        <input name="newpw" placeholder="New Password">
-        <input type="hidden" name="target" value="{{u}}">
-        <button name="action" value="edit_pw_admin">Change PW</button>
-        <button name="action" value="del_user">Delete</button>
-        </form>
-        {% endif %}
-    {% endfor %}
-    </div>
-    {% endif %}
+{% for g in user_data.groups %}
+<label><input type="checkbox" name="gids" value="{{g.id}}"> {{g.name}}</label><br>
+{% endfor %}
 
-    <div class="card">
-    <h3>🔑 Token</h3>
-    <form method="post">
-    <input name="token" value="{{user_data.token}}">
-    <button name="action" value="save_token">Save</button>
-    </form>
-    </div>
+<textarea name="msg" placeholder="ข้อความ"></textarea>
 
-    <div class="card">
-    <h3>➕ Add Group</h3>
-    <form method="post">
-    <input name="gid" placeholder="Group ID">
-    <input name="gname" placeholder="Name">
-    <button name="action" value="add_group">Add</button>
-    </form>
-    </div>
+<div class="drop" id="drop">
+ลากไฟล์มาวาง หรือคลิกเลือก
+<input type="file" name="file" id="file" hidden>
+</div>
 
-    <div class="card">
-    <h3>📢 Send</h3>
-    <form method="post">
-    {% for g in user_data.groups %}
-    <label><input type="checkbox" name="gids" value="{{g.id}}"> {{g.name}}</label>
-    <button name="delg" value="{{g.id}}">❌</button><br>
-    {% endfor %}
-    <textarea name="msg"></textarea>
-    <button name="action" value="send">Send</button>
-    </form>
-    </div>
+<div class="preview" id="preview"></div>
 
-    <h3>{{result}}</h3>
-    """, user=user, user_data=user_data, config=config, result=result)
+<button name="action" value="send">Send</button>
+</form>
+</div>
+
+<h3>{{result}}</h3>
+
+<script>
+let drop = document.getElementById("drop");
+let fileInput = document.getElementById("file");
+let preview = document.getElementById("preview");
+
+drop.onclick = () => fileInput.click();
+
+drop.ondragover = e => {
+    e.preventDefault();
+    drop.style.background="#222";
+};
+
+drop.ondragleave = e => {
+    drop.style.background="";
+};
+
+drop.ondrop = e => {
+    e.preventDefault();
+    fileInput.files = e.dataTransfer.files;
+    showPreview(fileInput.files[0]);
+};
+
+fileInput.onchange = () => {
+    showPreview(fileInput.files[0]);
+};
+
+function showPreview(file){
+    preview.innerHTML="";
+    let url = URL.createObjectURL(file);
+
+    if(file.type.includes("image")){
+        preview.innerHTML = "<img src='"+url+"'>";
+    }else if(file.type.includes("video")){
+        preview.innerHTML = "<video src='"+url+"' controls></video>";
+    }
+}
+</script>
+""", user=user, user_data=user_data, result=result)
 
 @app.route("/logout")
 def logout():
     session.clear()
     return redirect("/login")
 
-# Railway FIX
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 5000)))
