@@ -1,6 +1,5 @@
 from flask import Flask, request, session, redirect, render_template_string, send_from_directory
 import json, os, requests
-from telethon.sync import TelegramClient
 
 app = Flask(__name__)
 app.secret_key = "supersecretkey"
@@ -8,7 +7,7 @@ app.secret_key = "supersecretkey"
 APP_NAME = "Telegram Master Panel 🚀"
 CONFIG_FILE = "Bot/config.json"
 
-# ---------------- LOGO ----------------
+# ---------------- LOGO ROUTE ----------------
 @app.route("/logo")
 def logo():
     return send_from_directory(".", "logo.png")
@@ -43,11 +42,55 @@ def login():
             return "❌ Login ผิด"
 
     return f"""
-    <div style="text-align:center;margin-top:100px;">
+    <style>
+    body {{
+        background:#0b0f14;
+        font-family:sans-serif;
+        display:flex;
+        justify-content:center;
+        align-items:center;
+        height:100vh;
+        color:white;
+    }}
+    .box {{
+        background:#111;
+        padding:40px;
+        border-radius:16px;
+        width:340px;
+        text-align:center;
+    }}
+    .logo {{
+        width:220px;
+        margin-bottom:10px;
+        filter: drop-shadow(0 0 15px #00d9ff);
+    }}
+    input {{
+        width:100%;
+        padding:12px;
+        margin:8px 0;
+        border-radius:8px;
+        border:none;
+        background:#222;
+        color:white;
+    }}
+    button {{
+        width:100%;
+        padding:12px;
+        background:gold;
+        border:none;
+        border-radius:8px;
+        cursor:pointer;
+    }}
+    </style>
+
+    <div class="box">
+        <img src="/logo" class="logo">
         <h2>{APP_NAME}</h2>
+        <h3>🚀 Login</h3>
+
         <form method="post">
-            <input name="user" placeholder="Username"><br><br>
-            <input type="password" name="pw" placeholder="Password"><br><br>
+            <input name="user" placeholder="Username">
+            <input type="password" name="pw" placeholder="Password">
             <button>Login</button>
         </form>
     </div>
@@ -62,13 +105,7 @@ def home():
     config = load_config()
     user = session["user"]
 
-    user_data = config["users"].get(user, {
-        "token":"",
-        "api_id":"",
-        "api_hash":"",
-        "groups":[]
-    })
-
+    user_data = config["users"].get(user, {"token":"","groups":[]})
     result = ""
 
     if request.method == "POST":
@@ -77,112 +114,46 @@ def home():
         if action == "save_token":
             user_data["token"] = request.form.get("token")
 
-        elif action == "save_userbot":
-            user_data["api_id"] = request.form.get("api_id")
-            user_data["api_hash"] = request.form.get("api_hash")
-
         elif action == "add_group":
             user_data["groups"].append({
                 "id": request.form.get("gid"),
                 "name": request.form.get("gname")
             })
 
-        # 🔥 ดึงกลุ่มอัตโนมัติ
-        elif action == "fetch_groups":
-            api_id = user_data.get("api_id")
-            api_hash = user_data.get("api_hash")
-
-            if not api_id or not api_hash:
-                result = "❌ กรุณาใส่ API_ID และ API_HASH ก่อน"
-            else:
-                try:
-                    client = TelegramClient("userbot", int(api_id), api_hash)
-                    client.start()
-
-                    dialogs = client.get_dialogs()
-
-                    groups = []
-                    for d in dialogs:
-                        if d.is_group or d.is_channel:
-                            groups.append({
-                                "id": d.id,
-                                "name": d.title
-                            })
-
-                    user_data["groups"] = groups
-                    result = f"✅ ดึงกลุ่มสำเร็จ {len(groups)} กลุ่ม"
-
-                    client.disconnect()
-
-                except Exception as e:
-                    result = f"❌ ERROR: {e}"
-
         elif action == "send":
-            token = user_data.get("token")
-            api_id = user_data.get("api_id")
-            api_hash = user_data.get("api_hash")
-
+            token = user_data["token"]
             gids = request.form.getlist("gids")
             msg = request.form.get("msg")
             file = request.files.get("file")
 
             ok = 0
 
-            client = None
-            if api_id and api_hash:
-                try:
-                    client = TelegramClient("userbot", int(api_id), api_hash)
-                    client.start()
-                except:
-                    client = None
-
             for gid in gids:
                 try:
-                    sent = False
+                    if file and file.filename:
+                        file.stream.seek(0)
 
-                    # BOT
-                    if token:
-                        try:
-                            if file and file.filename:
-                                file.stream.seek(0)
-
-                                if "video" in file.mimetype:
-                                    url = f"https://api.telegram.org/bot{token}/sendVideo"
-                                    requests.post(url,
-                                        data={"chat_id": gid, "caption": msg},
-                                        files={"video": file}
-                                    )
-                                else:
-                                    url = f"https://api.telegram.org/bot{token}/sendPhoto"
-                                    requests.post(url,
-                                        data={"chat_id": gid, "caption": msg},
-                                        files={"photo": file}
-                                    )
-                            else:
-                                url = f"https://api.telegram.org/bot{token}/sendMessage"
-                                requests.post(url,
-                                    data={"chat_id": gid, "text": msg}
-                                )
-
-                            sent = True
-                        except:
-                            sent = False
-
-                    # USERBOT fallback
-                    if not sent and client:
-                        if file and file.filename:
-                            file.stream.seek(0)
-                            client.send_file(int(gid), file, caption=msg)
+                        if "video" in file.mimetype:
+                            url = f"https://api.telegram.org/bot{token}/sendVideo"
+                            requests.post(url,
+                                data={"chat_id": gid, "caption": msg},
+                                files={"video": file}
+                            )
                         else:
-                            client.send_message(int(gid), msg)
+                            url = f"https://api.telegram.org/bot{token}/sendPhoto"
+                            requests.post(url,
+                                data={"chat_id": gid, "caption": msg},
+                                files={"photo": file}
+                            )
+                    else:
+                        url = f"https://api.telegram.org/bot{token}/sendMessage"
+                        requests.post(url,
+                            data={"chat_id": gid, "text": msg}
+                        )
 
                     ok += 1
-
-                except Exception as e:
-                    print("ERROR:", e)
-
-            if client:
-                client.disconnect()
+                except:
+                    pass
 
             result = f"✅ ส่งสำเร็จ {ok} กลุ่ม"
 
@@ -190,46 +161,53 @@ def home():
         save_config(config)
 
     HTML = """
-    <div style="max-width:600px;margin:auto;color:white;">
-    <h2>Telegram Master Panel 🚀</h2>
+    <style>
+    body {background:#0b0f14;color:white;font-family:sans-serif;}
+    .box {max-width:600px;margin:auto;padding:20px;}
+    .logo {width:200px;display:block;margin:auto;filter: drop-shadow(0 0 10px #00d9ff);}
+    input,textarea {width:100%;padding:10px;margin:5px 0;border-radius:8px;border:none;background:#222;color:white;}
+    button {background:gold;border:none;padding:10px;border-radius:8px;cursor:pointer;}
+    </style>
 
-    <form method="POST" enctype="multipart/form-data">
+    <div class="box">
+        <img src="/logo" class="logo">
+        <h2 style="text-align:center;">Telegram Master Panel 🚀</h2>
 
-    <h3>Token (Bot)</h3>
-    <input name="token" value="{{user_data.token}}">
-    <button name="action" value="save_token">Save</button>
+        <a href="/logout">Logout</a><br><br>
 
-    <h3>UserBot</h3>
-    <input name="api_id" placeholder="API_ID" value="{{user_data.api_id}}">
-    <input name="api_hash" placeholder="API_HASH" value="{{user_data.api_hash}}">
-    <button name="action" value="save_userbot">Save UserBot</button>
+        <form method="POST" enctype="multipart/form-data">
 
-    <br><br>
-    <button name="action" value="fetch_groups">🔄 ดึงกลุ่มอัตโนมัติ</button>
+        <h3>Token</h3>
+        <input name="token" value="{{user_data.token}}">
+        <button name="action" value="save_token">Save</button>
 
-    <h3>Groups</h3>
+        <h3>Add Group</h3>
+        <input name="gid" placeholder="Group ID">
+        <input name="gname" placeholder="Name">
+        <button name="action" value="add_group">Add</button>
 
-    <label><input type="checkbox" id="all"> ALL</label><br>
+        <h3>Send</h3>
 
-    {% for g in user_data.groups %}
-        <label><input type="checkbox" name="gids" value="{{g.id}}" class="g"> {{g.name}}</label><br>
-    {% endfor %}
+        <label><input type="checkbox" id="all"> ALL</label><br>
 
-    <textarea name="msg"></textarea><br>
-    <input type="file" name="file"><br>
+        {% for g in user_data.groups %}
+            <label><input type="checkbox" name="gids" value="{{g.id}}" class="g"> {{g.name}}</label><br>
+        {% endfor %}
 
-    <button name="action" value="send">🚀 Send</button>
+        <textarea name="msg"></textarea>
+        <input type="file" name="file">
 
-    </form>
+        <button name="action" value="send">🚀 Send</button>
+        </form>
 
-    <h3>{{result}}</h3>
+        <h3>{{result}}</h3>
+    </div>
 
     <script>
     document.getElementById("all").onchange = function(){
         document.querySelectorAll(".g").forEach(e=>e.checked=this.checked)
     }
     </script>
-    </div>
     """
 
     return render_template_string(HTML, user_data=user_data, result=result)
