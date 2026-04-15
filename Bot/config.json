@@ -1,0 +1,32 @@
+{
+  "users": {
+    "admin": {
+      "password": "1234",
+      "token": "8691882125:AAEsCCIz4pMi0UNN5kon30t9f3xAJFTKOXU",
+      "groups": [
+        {
+          "id": "-1003847702760",
+          "name": "Test Bot Group"
+        },
+        {
+          "id": "-1003934652901",
+          "name": "testกลุ่ม 2"
+        },
+        {
+          "id": "-1003598584926",
+          "name": "testกลุ่ม3"
+        }
+      ]
+    },
+    "Bkk": {
+      "password": "9999",
+      "token": "",
+      "groups": []
+    },
+    "ghh": {
+      "password": "1111",
+      "token": "",
+      "groups": []
+    }
+  }
+}

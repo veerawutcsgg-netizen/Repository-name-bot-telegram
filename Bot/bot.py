@@ -1,0 +1,165 @@
+from flask import Flask, request, render_template_string, session, redirect
+import requests, json, os
+
+app = Flask(__name__)
+app.secret_key = "123456"
+
+CONFIG_FILE = "config.json"
+
+# ---------------- CONFIG ----------------
+def load_config():
+    if not os.path.exists(CONFIG_FILE):
+        return {"users": {}}
+    with open(CONFIG_FILE, "r") as f:
+        return json.load(f)
+
+def save_config(data):
+    with open(CONFIG_FILE, "w") as f:
+        json.dump(data, f, indent=2)
+
+# ---------------- LOGIN ----------------
+@app.route("/login", methods=["GET","POST"])
+def login():
+    config = load_config()
+
+    if request.method == "POST":
+        user = request.form.get("user")
+        pw = request.form.get("pw")
+
+        if user in config["users"] and config["users"][user]["password"] == pw:
+            session["user"] = user
+            return redirect("/")
+        else:
+            return "❌ Login ผิด"
+
+    return """
+    <h3>Login</h3>
+    <form method="post">
+    Username: <input name="user"><br>
+    Password: <input type="password" name="pw"><br><br>
+    <button>Login</button>
+    </form>
+    """
+
+# ---------------- MAIN ----------------
+@app.route("/", methods=["GET","POST"])
+def home():
+    if "user" not in session:
+        return redirect("/login")
+
+    config = load_config()
+    user = session["user"]
+
+    # สร้าง user ถ้ายังไม่มี
+    if user not in config["users"]:
+        config["users"][user] = {"password":"1234","token":"","groups":[]}
+
+    user_data = config["users"][user]
+    result = ""
+
+    if request.method == "POST":
+        action = request.form.get("action")
+
+        if action == "save_token":
+            user_data["token"] = request.form.get("token")
+
+        elif action == "add_group":
+            user_data["groups"].append({
+                "id": request.form.get("gid"),
+                "name": request.form.get("gname")
+            })
+
+        elif request.form.get("del"):
+            gid = request.form.get("del")
+            user_data["groups"] = [g for g in user_data["groups"] if g["id"] != gid]
+
+        elif action == "send":
+            token = user_data["token"]
+            gids = request.form.getlist("gids")
+            msg = request.form.get("msg")
+            file = request.files.get("file")
+
+            ok = 0
+
+            for gid in gids:
+                try:
+                    if file and file.filename:
+                        file.stream.seek(0)
+
+                        if "video" in file.mimetype:
+                            url = f"https://api.telegram.org/bot{token}/sendVideo"
+                            requests.post(url,
+                                data={"chat_id": gid, "caption": msg},
+                                files={"video": (file.filename, file.stream, file.mimetype)}
+                            )
+                        else:
+                            url = f"https://api.telegram.org/bot{token}/sendPhoto"
+                            requests.post(url,
+                                data={"chat_id": gid, "caption": msg},
+                                files={"photo": (file.filename, file.stream, file.mimetype)}
+                            )
+                    else:
+                        url = f"https://api.telegram.org/bot{token}/sendMessage"
+                        requests.post(url,
+                            data={"chat_id": gid, "text": msg}
+                        )
+
+                    ok += 1
+                except:
+                    pass
+
+            result = f"ส่งสำเร็จ {ok} กลุ่ม"
+
+        save_config(config)
+
+    HTML = """
+    <h2>USER: {{user}}</h2>
+
+    <form method="POST" enctype="multipart/form-data">
+
+    Token:<br>
+    <input name="token" value="{{user_data.token}}">
+    <button name="action" value="save_token">💾</button><br><br>
+
+    Add Group:<br>
+    <input name="gid" placeholder="Group ID">
+    <input name="gname" placeholder="Name">
+    <button name="action" value="add_group">➕</button><br><br>
+
+    <label><input type="checkbox" id="all"> ALL</label><br>
+
+    {% for g in user_data.groups %}
+    <label>
+    <input type="checkbox" name="gids" value="{{g.id}}" class="g">
+    {{g.name}}
+    </label>
+    <button name="del" value="{{g.id}}">🗑</button><br>
+    {% endfor %}
+
+    <br>
+    <textarea name="msg"></textarea><br><br>
+
+    <input type="file" name="file"><br><br>
+
+    <button name="action" value="send">🚀 Send</button>
+
+    </form>
+
+    <h3>{{result}}</h3>
+
+    <script>
+    document.getElementById("all").onchange = function(){
+        document.querySelectorAll(".g").forEach(e=>e.checked=this.checked)
+    }
+    </script>
+    """
+
+    return render_template_string(HTML, user=user, user_data=user_data, result=result)
+
+# ---------------- LOGOUT ----------------
+@app.route("/logout")
+def logout():
+    session.clear()
+    return redirect("/login")
+
+app.run(host="0.0.0.0", port=5000, debug=True)
