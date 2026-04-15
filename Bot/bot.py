@@ -86,17 +86,6 @@ def panel():
     <input name="token" value="{u.get("token","")}">
     <button>Save</button></form>
 
-    <h3>➕ Add User</h3>
-    <form method="post" action="/add_user">
-    <input name="newuser" placeholder="Username">
-    <input name="newpass" placeholder="Password">
-    <button>Add</button></form>
-
-    <h3>🔒 Change Password</h3>
-    <form method="post" action="/change_pass">
-    <input name="newpass" placeholder="New Password">
-    <button>Change</button></form>
-
     <h3>UserBot</h3>
     <form method="post" action="/save_api">
     <input name="api_id" placeholder="API_ID">
@@ -115,40 +104,15 @@ def panel():
     <button>Fetch Groups</button></form>
 
     <h3>📢 Send Message</h3>
-    <form method="post" action="/send">
+    <form method="post" action="/send" enctype="multipart/form-data">
     {groups_html}
-    <textarea name="msg"></textarea>
+    <textarea name="msg" placeholder="Message"></textarea>
+    <input type="file" name="file">
     <button>Send</button></form>
 
     <a href="/logout">Logout</a>
     </div>
     """
-
-# ---------------- USER ---------------- #
-@app.route("/add_user", methods=["POST"])
-def add_user():
-    if session["user"] != "admin":
-        return "No permission"
-
-    data = load_config()
-    data["users"][request.form["newuser"]] = {
-        "password": request.form["newpass"],
-        "token": "",
-        "api_id": "",
-        "api_hash": "",
-        "session": request.form["newuser"],
-        "groups": []
-    }
-    save_config(data)
-    return redirect("/panel")
-
-@app.route("/change_pass", methods=["POST"])
-def change_pass():
-    user = session["user"]
-    data = load_config()
-    data["users"][user]["password"] = request.form["newpass"]
-    save_config(data)
-    return redirect("/panel")
 
 # ---------------- SAVE ---------------- #
 @app.route("/save_token", methods=["POST"])
@@ -228,6 +192,7 @@ def send():
 
     msg = request.form["msg"]
     selected = request.form.getlist("groups")
+    file = request.files.get("file")
 
     client = TelegramClient(f"{SESSION_DIR}/{u['session']}", int(u["api_id"]), u["api_hash"])
     client.connect()
@@ -237,9 +202,17 @@ def send():
 
     for gid in selected:
         try:
-            client.send_message(int(gid), msg)
+            if file and file.filename != "":
+                path = "temp_upload"
+                file.save(path)
+                client.send_file(int(gid), path, caption=msg)
+                os.remove(path)
+            else:
+                client.send_message(int(gid), msg)
+
             success += 1
             time.sleep(random.uniform(1, 2))
+
         except:
             fail += 1
 
