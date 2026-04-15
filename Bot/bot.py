@@ -6,7 +6,6 @@ app.secret_key = "supersecret"
 
 CONFIG_FILE = "Bot/config.json"
 
-# ---------------- CONFIG ----------------
 def load_config():
     if not os.path.exists(CONFIG_FILE):
         return {"users": {}}
@@ -24,6 +23,7 @@ def save_config(data):
 @app.route("/login", methods=["GET","POST"])
 def login():
     config = load_config()
+    error = ""
 
     if request.method == "POST":
         user = request.form.get("user")
@@ -34,8 +34,6 @@ def login():
             return redirect("/")
         else:
             error = "❌ Login ผิด"
-    else:
-        error = ""
 
     return render_template_string("""
     <style>
@@ -47,29 +45,31 @@ def login():
         justify-content:center;
         align-items:center;
         height:100vh;
+        font-size:18px;
     }
     .box{
         background:#1a1a1a;
         padding:30px;
         border-radius:15px;
-        width:300px;
+        width:350px;
         text-align:center;
-        box-shadow:0 0 20px rgba(255,215,0,0.2);
+        box-shadow:0 0 20px rgba(255,215,0,0.3);
     }
     input{
         width:100%;
-        padding:10px;
-        margin:5px 0;
-        border:none;
+        padding:12px;
+        margin:8px 0;
         border-radius:8px;
+        border:none;
+        font-size:16px;
     }
     button{
         width:100%;
-        padding:10px;
+        padding:12px;
         background:gold;
         border:none;
         border-radius:8px;
-        cursor:pointer;
+        font-size:16px;
     }
     </style>
 
@@ -116,17 +116,27 @@ def home():
             user_data["groups"] = [g for g in user_data["groups"] if g["id"] != gid]
 
         elif action == "add_user":
-            new_user = request.form.get("new_user")
-            new_pw = request.form.get("new_pw")
-            if new_user not in config["users"]:
-                config["users"][new_user] = {
-                    "password": new_pw,
-                    "token": "",
-                    "groups": []
-                }
+            if user != "admin":
+                result = "❌ เฉพาะ admin เท่านั้น"
+            else:
+                new_user = request.form.get("new_user")
+                new_pw = request.form.get("new_pw")
+
+                if not new_user or not new_pw:
+                    result = "❌ กรอกข้อมูลให้ครบ"
+                elif new_user in config["users"]:
+                    result = "❌ user นี้มีแล้ว"
+                else:
+                    config["users"][new_user] = {
+                        "password": new_pw,
+                        "token": "",
+                        "groups": []
+                    }
+                    result = f"✅ เพิ่ม {new_user} สำเร็จ"
 
         elif action == "change_pw":
             user_data["password"] = request.form.get("newpw")
+            result = "✅ เปลี่ยนรหัสแล้ว"
 
         elif action == "send":
             token = user_data["token"]
@@ -135,30 +145,20 @@ def home():
             file = request.files.get("file")
 
             ok = 0
-
             for gid in gids:
                 try:
                     if file and file.filename:
                         file.stream.seek(0)
-
-                        if "video" in file.mimetype:
-                            url = f"https://api.telegram.org/bot{token}/sendVideo"
-                            requests.post(url,
-                                data={"chat_id": gid, "caption": msg},
-                                files={"video": (file.filename, file.stream, file.mimetype)}
-                            )
-                        else:
-                            url = f"https://api.telegram.org/bot{token}/sendPhoto"
-                            requests.post(url,
-                                data={"chat_id": gid, "caption": msg},
-                                files={"photo": (file.filename, file.stream, file.mimetype)}
-                            )
+                        url = f"https://api.telegram.org/bot{token}/sendPhoto"
+                        requests.post(url,
+                            data={"chat_id": gid, "caption": msg},
+                            files={"photo": (file.filename, file.stream, file.mimetype)}
+                        )
                     else:
                         url = f"https://api.telegram.org/bot{token}/sendMessage"
                         requests.post(url,
                             data={"chat_id": gid, "text": msg}
                         )
-
                     ok += 1
                 except:
                     pass
@@ -169,11 +169,12 @@ def home():
 
     return render_template_string("""
     <style>
-    body{background:#0d0d0d;color:#fff;font-family:sans-serif;padding:20px;}
-    .card{background:#1a1a1a;padding:15px;margin:10px 0;border-radius:10px;}
-    input,textarea{width:100%;padding:10px;margin:5px 0;border-radius:8px;border:none;}
-    button{background:gold;border:none;padding:8px 15px;border-radius:8px;cursor:pointer;margin:3px;}
-    img{max-width:200px;border-radius:10px;margin-top:10px;}
+    body{background:#0d0d0d;color:#fff;font-family:sans-serif;padding:20px;font-size:18px;}
+    .card{background:#1a1a1a;padding:20px;margin:15px 0;border-radius:15px;}
+    input,textarea{width:100%;padding:12px;margin:8px 0;border-radius:8px;border:none;font-size:16px;}
+    textarea{height:120px;}
+    button{background:gold;border:none;padding:10px 15px;border-radius:8px;font-size:16px;}
+    img{max-width:250px;border-radius:10px;margin-top:10px;}
     </style>
 
     <h2>👑 USER: {{user}}</h2>
@@ -187,6 +188,7 @@ def home():
     </form>
     </div>
 
+    {% if user == "admin" %}
     <div class="card">
     <h3>➕ Add User</h3>
     <form method="post">
@@ -195,6 +197,7 @@ def home():
     <button name="action" value="add_user">Add</button>
     </form>
     </div>
+    {% endif %}
 
     <div class="card">
     <h3>🔐 Change Password</h3>
@@ -205,14 +208,13 @@ def home():
     </div>
 
     <div class="card">
-    <h3>📢 Send Message</h3>
+    <h3>📢 Send</h3>
     <form method="post" enctype="multipart/form-data">
 
     <label><input type="checkbox" id="all"> ALL</label><br>
 
     {% for g in user_data.groups %}
-    <label><input type="checkbox" name="gids" value="{{g.id}}" class="g"> {{g.name}}</label>
-    <button name="del" value="{{g.id}}">🗑</button><br>
+    <label><input type="checkbox" name="gids" value="{{g.id}}" class="g"> {{g.name}}</label><br>
     {% endfor %}
 
     <textarea name="msg" placeholder="พิมพ์ข้อความ..."></textarea>
@@ -246,7 +248,6 @@ def home():
     </script>
     """, user=user, user_data=user_data, result=result)
 
-# ---------------- LOGOUT ----------------
 @app.route("/logout")
 def logout():
     session.clear()
