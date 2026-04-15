@@ -37,42 +37,11 @@ def login():
 
     return render_template_string("""
     <style>
-    body{
-        background:#0d0d0d;
-        font-family:sans-serif;
-        color:#fff;
-        display:flex;
-        justify-content:center;
-        align-items:center;
-        height:100vh;
-        font-size:18px;
-    }
-    .box{
-        background:#1a1a1a;
-        padding:30px;
-        border-radius:15px;
-        width:350px;
-        text-align:center;
-        box-shadow:0 0 20px rgba(255,215,0,0.3);
-    }
-    input{
-        width:100%;
-        padding:12px;
-        margin:8px 0;
-        border-radius:8px;
-        border:none;
-        font-size:16px;
-    }
-    button{
-        width:100%;
-        padding:12px;
-        background:gold;
-        border:none;
-        border-radius:8px;
-        font-size:16px;
-    }
+    body{background:#0d0d0d;color:#fff;font-family:sans-serif;display:flex;justify-content:center;align-items:center;height:100vh;font-size:18px;}
+    .box{background:#1a1a1a;padding:30px;border-radius:15px;width:350px;text-align:center;}
+    input{width:100%;padding:12px;margin:8px 0;border-radius:8px;border:none;font-size:16px;}
+    button{width:100%;padding:12px;background:gold;border:none;border-radius:8px;font-size:16px;}
     </style>
-
     <div class="box">
         <h2>LOGIN</h2>
         <form method="post">
@@ -110,6 +79,7 @@ def home():
                 "id": request.form.get("gid"),
                 "name": request.form.get("gname")
             })
+            result = "✅ เพิ่มกลุ่มแล้ว"
 
         elif request.form.get("del"):
             gid = request.form.get("del")
@@ -173,7 +143,7 @@ def home():
     .card{background:#1a1a1a;padding:20px;margin:15px 0;border-radius:15px;}
     input,textarea{width:100%;padding:12px;margin:8px 0;border-radius:8px;border:none;font-size:16px;}
     textarea{height:120px;}
-    button{background:gold;border:none;padding:10px 15px;border-radius:8px;font-size:16px;}
+    button{background:gold;border:none;padding:10px 15px;border-radius:8px;font-size:16px;margin:3px;}
     img{max-width:250px;border-radius:10px;margin-top:10px;}
     </style>
 
@@ -200,10 +170,11 @@ def home():
     {% endif %}
 
     <div class="card">
-    <h3>🔐 Change Password</h3>
+    <h3>➕ Add Group</h3>
     <form method="post">
-    <input name="newpw" placeholder="New Password">
-    <button name="action" value="change_pw">Change</button>
+    <input name="gid" placeholder="Group ID เช่น -100xxxx">
+    <input name="gname" placeholder="ชื่อกลุ่ม">
+    <button name="action" value="add_group">Add Group</button>
     </form>
     </div>
 
@@ -214,7 +185,11 @@ def home():
     <label><input type="checkbox" id="all"> ALL</label><br>
 
     {% for g in user_data.groups %}
-    <label><input type="checkbox" name="gids" value="{{g.id}}" class="g"> {{g.name}}</label><br>
+    <label>
+    <input type="checkbox" name="gids" value="{{g.id}}" class="g">
+    {{g.name}}
+    </label>
+    <button name="del" value="{{g.id}}">🗑</button><br>
     {% endfor %}
 
     <textarea name="msg" placeholder="พิมพ์ข้อความ..."></textarea>
