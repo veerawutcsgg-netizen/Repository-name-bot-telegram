@@ -1,11 +1,11 @@
 from flask import Flask, request, session, redirect, render_template_string
 import json, os, requests
 
-app = Flask(__name__)
+app = Flask(__name__, static_folder="Bot")
 app.secret_key = "supersecretkey"
 
 APP_NAME = "Telegram Master Panel 🚀"
-LOGO = "Bot/logo.png"
+LOGO = "logo.png"
 CONFIG_FILE = "Bot/config.json"
 
 # ---------------- CONFIG ----------------
@@ -40,39 +40,60 @@ def login():
     return f"""
     <style>
     body {{
-        background:#0b0f14;
-        font-family:sans-serif;
+        background: radial-gradient(circle at top, #0b0f14, #000);
+        font-family: 'Segoe UI', sans-serif;
         display:flex;
         justify-content:center;
         align-items:center;
         height:100vh;
         color:white;
     }}
+
     .box {{
         background:#111;
         padding:40px;
-        border-radius:16px;
-        width:320px;
+        border-radius:18px;
+        width:340px;
         text-align:center;
+        box-shadow: 0 0 40px rgba(0,200,255,0.2);
     }}
+
     .logo {{
         width:220px;
         margin-bottom:10px;
+        animation: float 3s ease-in-out infinite;
+        filter: drop-shadow(0 0 15px #00d9ff);
     }}
+
+    @keyframes float {{
+        0% {{ transform: translateY(0px); }}
+        50% {{ transform: translateY(-10px); }}
+        100% {{ transform: translateY(0px); }}
+    }}
+
     input {{
         width:100%;
         padding:12px;
         margin:8px 0;
-        border-radius:8px;
+        border-radius:10px;
         border:none;
+        background:#222;
+        color:white;
     }}
+
     button {{
         width:100%;
         padding:12px;
-        background:gold;
+        background:linear-gradient(45deg,#ffd700,#ffcc00);
         border:none;
-        border-radius:8px;
+        border-radius:10px;
         cursor:pointer;
+        font-weight:bold;
+    }}
+
+    h2 {{
+        margin:10px 0;
+        color:#00d9ff;
     }}
     </style>
 
@@ -98,10 +119,7 @@ def home():
     config = load_config()
     user = session["user"]
 
-    if user not in config["users"]:
-        config["users"][user] = {"password":"1234","token":"","groups":[]}
-
-    user_data = config["users"][user]
+    user_data = config["users"].get(user, {"token":"","groups":[]})
     result = ""
 
     if request.method == "POST":
@@ -111,14 +129,10 @@ def home():
             user_data["token"] = request.form.get("token")
 
         elif action == "add_group":
-            gid = request.form.get("gid")
-            name = request.form.get("gname")
-            if gid and name:
-                user_data["groups"].append({"id": gid, "name": name})
-
-        elif request.form.get("del"):
-            gid = request.form.get("del")
-            user_data["groups"] = [g for g in user_data["groups"] if g["id"] != gid]
+            user_data["groups"].append({
+                "id": request.form.get("gid"),
+                "name": request.form.get("gname")
+            })
 
         elif action == "send":
             token = user_data["token"]
@@ -137,34 +151,36 @@ def home():
                             url = f"https://api.telegram.org/bot{token}/sendVideo"
                             requests.post(url,
                                 data={"chat_id": gid, "caption": msg},
-                                files={"video": (file.filename, file.stream, file.mimetype)}
+                                files={"video": file}
                             )
                         else:
                             url = f"https://api.telegram.org/bot{token}/sendPhoto"
                             requests.post(url,
                                 data={"chat_id": gid, "caption": msg},
-                                files={"photo": (file.filename, file.stream, file.mimetype)}
+                                files={"photo": file}
                             )
                     else:
                         url = f"https://api.telegram.org/bot{token}/sendMessage"
                         requests.post(url,
                             data={"chat_id": gid, "text": msg}
                         )
+
                     ok += 1
                 except:
                     pass
 
             result = f"✅ ส่งสำเร็จ {ok} กลุ่ม"
 
+        config["users"][user] = user_data
         save_config(config)
 
     HTML = """
     <style>
     body {background:#0b0f14;color:white;font-family:sans-serif;}
     .box {max-width:600px;margin:auto;padding:20px;}
-    input,textarea {width:100%;padding:10px;margin:5px 0;border-radius:8px;border:none;}
+    .logo {width:200px;display:block;margin:auto;filter: drop-shadow(0 0 10px #00d9ff);}
+    input,textarea {width:100%;padding:10px;margin:5px 0;border-radius:8px;border:none;background:#222;color:white;}
     button {background:gold;border:none;padding:10px;border-radius:8px;cursor:pointer;}
-    .logo {width:200px;display:block;margin:auto;}
     </style>
 
     <div class="box">
@@ -175,33 +191,27 @@ def home():
 
         <form method="POST" enctype="multipart/form-data">
 
-        <h3>🔑 Token</h3>
+        <h3>Token</h3>
         <input name="token" value="{{user_data.token}}">
         <button name="action" value="save_token">Save</button>
 
-        <h3>➕ Add Group</h3>
+        <h3>Add Group</h3>
         <input name="gid" placeholder="Group ID">
         <input name="gname" placeholder="Name">
         <button name="action" value="add_group">Add</button>
 
-        <h3>📢 Send</h3>
+        <h3>Send</h3>
 
         <label><input type="checkbox" id="all"> ALL</label><br>
 
         {% for g in user_data.groups %}
-            <label>
-            <input type="checkbox" name="gids" value="{{g.id}}" class="g">
-            {{g.name}}
-            </label>
-            <button name="del" value="{{g.id}}">❌</button><br>
+            <label><input type="checkbox" name="gids" value="{{g.id}}" class="g"> {{g.name}}</label><br>
         {% endfor %}
 
-        <textarea name="msg" placeholder="ข้อความ"></textarea>
-
+        <textarea name="msg"></textarea>
         <input type="file" name="file">
 
         <button name="action" value="send">🚀 Send</button>
-
         </form>
 
         <h3>{{result}}</h3>
@@ -222,12 +232,10 @@ def home():
         app_name=APP_NAME
     )
 
-# ---------------- LOGOUT ----------------
 @app.route("/logout")
 def logout():
     session.clear()
     return redirect("/login")
 
-# ---------------- RUN ----------------
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 5000)))
