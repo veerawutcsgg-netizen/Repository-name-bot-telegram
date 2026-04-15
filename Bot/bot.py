@@ -1,100 +1,44 @@
-from flask import Flask, request, session, redirect, render_template_string, send_from_directory
+from flask import Flask, request, session, redirect, render_template_string
 import json, os, requests
 
 app = Flask(__name__)
-app.secret_key = "supersecretkey"
+app.secret_key = "secret123"
 
-APP_NAME = "Telegram Master Panel 🚀"
 CONFIG_FILE = "Bot/config.json"
-
-# ---------------- LOGO ROUTE ----------------
-@app.route("/logo")
-def logo():
-    return send_from_directory(".", "logo.png")
 
 # ---------------- CONFIG ----------------
 def load_config():
     if not os.path.exists(CONFIG_FILE):
-        return {"users": {}}
-    try:
-        with open(CONFIG_FILE, "r") as f:
-            return json.load(f)
-    except:
-        return {"users": {}}
+        return {"users": {"admin": {"password":"1234","token":"","groups":[]}}}
+    with open(CONFIG_FILE,"r") as f:
+        return json.load(f)
 
 def save_config(data):
-    with open(CONFIG_FILE, "w") as f:
-        json.dump(data, f, indent=2)
+    with open(CONFIG_FILE,"w") as f:
+        json.dump(data,f,indent=2)
 
 # ---------------- LOGIN ----------------
 @app.route("/login", methods=["GET","POST"])
 def login():
-    config = load_config()
+    cfg = load_config()
 
-    if request.method == "POST":
-        user = request.form.get("user")
-        pw = request.form.get("pw")
+    if request.method=="POST":
+        u = request.form.get("user")
+        p = request.form.get("pw")
 
-        if user in config["users"] and config["users"][user]["password"] == pw:
-            session["user"] = user
+        if u in cfg["users"] and cfg["users"][u]["password"] == p:
+            session["user"] = u
             return redirect("/")
-        else:
-            return "❌ Login ผิด"
+        return "❌ Login Failed"
 
-    return f"""
-    <style>
-    body {{
-        background:#0b0f14;
-        font-family:sans-serif;
-        display:flex;
-        justify-content:center;
-        align-items:center;
-        height:100vh;
-        color:white;
-    }}
-    .box {{
-        background:#111;
-        padding:40px;
-        border-radius:16px;
-        width:340px;
-        text-align:center;
-    }}
-    .logo {{
-        width:220px;
-        margin-bottom:10px;
-        filter: drop-shadow(0 0 15px #00d9ff);
-    }}
-    input {{
-        width:100%;
-        padding:12px;
-        margin:8px 0;
-        border-radius:8px;
-        border:none;
-        background:#222;
-        color:white;
-    }}
-    button {{
-        width:100%;
-        padding:12px;
-        background:gold;
-        border:none;
-        border-radius:8px;
-        cursor:pointer;
-    }}
-    </style>
-
-    <div class="box">
-        <img src="/logo" class="logo">
-        <h2>{APP_NAME}</h2>
-        <h3>🚀 Login</h3>
-
-        <form method="post">
-            <input name="user" placeholder="Username">
-            <input type="password" name="pw" placeholder="Password">
-            <button>Login</button>
-        </form>
-    </div>
-    """
+    return '''
+    <h2>Login</h2>
+    <form method="post">
+    <input name="user"><br>
+    <input name="pw" type="password"><br>
+    <button>Login</button>
+    </form>
+    '''
 
 # ---------------- HOME ----------------
 @app.route("/", methods=["GET","POST"])
@@ -102,115 +46,147 @@ def home():
     if "user" not in session:
         return redirect("/login")
 
-    config = load_config()
+    cfg = load_config()
     user = session["user"]
+    is_admin = user == "admin"
 
-    user_data = config["users"].get(user, {"token":"","groups":[]})
-    result = ""
+    data = cfg["users"][user]
+    msg = ""
 
-    if request.method == "POST":
+    if request.method=="POST":
         action = request.form.get("action")
 
-        if action == "save_token":
-            user_data["token"] = request.form.get("token")
+        # -------- ADMIN --------
+        if is_admin:
+            if action == "add_user":
+                u = request.form.get("new_user")
+                p = request.form.get("new_pw")
 
-        elif action == "add_group":
-            user_data["groups"].append({
+                if u in cfg["users"]:
+                    msg = "❌ user ซ้ำ"
+                else:
+                    cfg["users"][u] = {"password":p,"token":"","groups":[]}
+                    msg = "✅ เพิ่ม user แล้ว"
+
+            elif action == "delete_user":
+                u = request.form.get("del_user")
+                if u != "admin":
+                    cfg["users"].pop(u, None)
+
+            elif action == "change_user_pw":
+                u = request.form.get("edit_user")
+                pw = request.form.get("edit_pw")
+                if u in cfg["users"]:
+                    cfg["users"][u]["password"] = pw
+
+        # -------- USER --------
+        if action == "change_my_pw":
+            data["password"] = request.form.get("mypw")
+
+        # -------- TOKEN --------
+        if action == "save_token":
+            data["token"] = request.form.get("token")
+
+        # -------- GROUP --------
+        if action == "add_group":
+            data["groups"].append({
                 "id": request.form.get("gid"),
                 "name": request.form.get("gname")
             })
 
-        elif action == "send":
-            token = user_data["token"]
+        # -------- SEND --------
+        if action == "send":
+            token = data["token"]
             gids = request.form.getlist("gids")
-            msg = request.form.get("msg")
-            file = request.files.get("file")
+            text = request.form.get("msg")
+            mode = request.form.get("mode")
 
             ok = 0
 
-            for gid in gids:
+            for g in gids:
                 try:
-                    if file and file.filename:
-                        file.stream.seek(0)
-
-                        if "video" in file.mimetype:
-                            url = f"https://api.telegram.org/bot{token}/sendVideo"
-                            requests.post(url,
-                                data={"chat_id": gid, "caption": msg},
-                                files={"video": file}
-                            )
-                        else:
-                            url = f"https://api.telegram.org/bot{token}/sendPhoto"
-                            requests.post(url,
-                                data={"chat_id": gid, "caption": msg},
-                                files={"photo": file}
-                            )
-                    else:
-                        url = f"https://api.telegram.org/bot{token}/sendMessage"
-                        requests.post(url,
-                            data={"chat_id": gid, "text": msg}
+                    if mode == "bot":
+                        requests.post(
+                            f"https://api.telegram.org/bot{token}/sendMessage",
+                            data={"chat_id":g,"text":text}
                         )
+                    else:
+                        # user mode (placeholder)
+                        # แนะนำให้ทำแบบ manual integration จริง
+                        print("User mode send:", g, text)
 
                     ok += 1
                 except:
                     pass
 
-            result = f"✅ ส่งสำเร็จ {ok} กลุ่ม"
+            msg = f"✅ ส่ง {ok} กลุ่ม"
 
-        config["users"][user] = user_data
-        save_config(config)
+        save_config(cfg)
 
-    HTML = """
-    <style>
-    body {background:#0b0f14;color:white;font-family:sans-serif;}
-    .box {max-width:600px;margin:auto;padding:20px;}
-    .logo {width:200px;display:block;margin:auto;filter: drop-shadow(0 0 10px #00d9ff);}
-    input,textarea {width:100%;padding:10px;margin:5px 0;border-radius:8px;border:none;background:#222;color:white;}
-    button {background:gold;border:none;padding:10px;border-radius:8px;cursor:pointer;}
-    </style>
+    return render_template_string("""
+    <h2>USER: {{user}}</h2>
 
-    <div class="box">
-        <img src="/logo" class="logo">
-        <h2 style="text-align:center;">Telegram Master Panel 🚀</h2>
+    {% if is_admin %}
+    <h3>👑 Manage Users</h3>
 
-        <a href="/logout">Logout</a><br><br>
+    <form method="post">
+    <input name="new_user" placeholder="user">
+    <input name="new_pw" placeholder="password">
+    <button name="action" value="add_user">Add</button>
+    </form>
 
-        <form method="POST" enctype="multipart/form-data">
+    <hr>
 
-        <h3>Token</h3>
-        <input name="token" value="{{user_data.token}}">
-        <button name="action" value="save_token">Save</button>
-
-        <h3>Add Group</h3>
-        <input name="gid" placeholder="Group ID">
-        <input name="gname" placeholder="Name">
-        <button name="action" value="add_group">Add</button>
-
-        <h3>Send</h3>
-
-        <label><input type="checkbox" id="all"> ALL</label><br>
-
-        {% for g in user_data.groups %}
-            <label><input type="checkbox" name="gids" value="{{g.id}}" class="g"> {{g.name}}</label><br>
-        {% endfor %}
-
-        <textarea name="msg"></textarea>
-        <input type="file" name="file">
-
-        <button name="action" value="send">🚀 Send</button>
+    {% for u in cfg.users %}
+        {% if u != "admin" %}
+        <form method="post">
+            {{u}}
+            <input name="edit_pw" placeholder="new pw">
+            <input type="hidden" name="edit_user" value="{{u}}">
+            <button name="action" value="change_user_pw">Edit</button>
+            <button name="action" value="delete_user" name="del_user" value="{{u}}">Delete</button>
         </form>
+        {% endif %}
+    {% endfor %}
+    {% endif %}
 
-        <h3>{{result}}</h3>
-    </div>
+    <h3>🔒 Change My Password</h3>
+    <form method="post">
+    <input name="mypw">
+    <button name="action" value="change_my_pw">Change</button>
+    </form>
 
-    <script>
-    document.getElementById("all").onchange = function(){
-        document.querySelectorAll(".g").forEach(e=>e.checked=this.checked)
-    }
-    </script>
-    """
+    <h3>Token</h3>
+    <form method="post">
+    <input name="token" value="{{data.token}}">
+    <button name="action" value="save_token">Save</button>
+    </form>
 
-    return render_template_string(HTML, user_data=user_data, result=result)
+    <h3>Add Group</h3>
+    <form method="post">
+    <input name="gid">
+    <input name="gname">
+    <button name="action" value="add_group">Add</button>
+    </form>
+
+    <h3>Send</h3>
+    <form method="post">
+
+    <select name="mode">
+        <option value="bot">Bot</option>
+        <option value="user">User (manual)</option>
+    </select><br><br>
+
+    {% for g in data.groups %}
+        <input type="checkbox" name="gids" value="{{g.id}}"> {{g.name}}<br>
+    {% endfor %}
+
+    <textarea name="msg"></textarea><br>
+    <button name="action" value="send">Send</button>
+    </form>
+
+    <h3>{{msg}}</h3>
+    """, user=user, is_admin=is_admin, cfg=cfg, data=data, msg=msg)
 
 # ---------------- LOGOUT ----------------
 @app.route("/logout")
@@ -220,4 +196,4 @@ def logout():
 
 # ---------------- RUN ----------------
 if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 5000)))
+    app.run(host="0.0.0.0", port=5000)
