@@ -17,6 +17,16 @@
           "name": "testกลุ่ม3"
         }
       ]
+    },
+    "Bkk": {
+      "password": "9999",
+      "token": "",
+      "groups": []
+    },
+    "ghh": {
+      "password": "1111",
+      "token": "",
+      "groups": []
     }
   }
 }
