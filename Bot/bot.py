@@ -1,12 +1,16 @@
-from flask import Flask, request, session, redirect, render_template_string
+from flask import Flask, request, session, redirect, render_template_string, send_from_directory
 import json, os, requests
 
-app = Flask(__name__, static_folder="Bot")
+app = Flask(__name__)
 app.secret_key = "supersecretkey"
 
 APP_NAME = "Telegram Master Panel 🚀"
-LOGO = "logo.png"
 CONFIG_FILE = "Bot/config.json"
+
+# ---------------- LOGO ROUTE ----------------
+@app.route("/logo")
+def logo():
+    return send_from_directory("Bot", "logo.png")
 
 # ---------------- CONFIG ----------------
 def load_config():
@@ -40,65 +44,47 @@ def login():
     return f"""
     <style>
     body {{
-        background: radial-gradient(circle at top, #0b0f14, #000);
-        font-family: 'Segoe UI', sans-serif;
+        background:#0b0f14;
+        font-family:sans-serif;
         display:flex;
         justify-content:center;
         align-items:center;
         height:100vh;
         color:white;
     }}
-
     .box {{
         background:#111;
         padding:40px;
-        border-radius:18px;
+        border-radius:16px;
         width:340px;
         text-align:center;
-        box-shadow: 0 0 40px rgba(0,200,255,0.2);
     }}
-
     .logo {{
         width:220px;
         margin-bottom:10px;
-        animation: float 3s ease-in-out infinite;
         filter: drop-shadow(0 0 15px #00d9ff);
     }}
-
-    @keyframes float {{
-        0% {{ transform: translateY(0px); }}
-        50% {{ transform: translateY(-10px); }}
-        100% {{ transform: translateY(0px); }}
-    }}
-
     input {{
         width:100%;
         padding:12px;
         margin:8px 0;
-        border-radius:10px;
+        border-radius:8px;
         border:none;
         background:#222;
         color:white;
     }}
-
     button {{
         width:100%;
         padding:12px;
-        background:linear-gradient(45deg,#ffd700,#ffcc00);
+        background:gold;
         border:none;
-        border-radius:10px;
+        border-radius:8px;
         cursor:pointer;
-        font-weight:bold;
-    }}
-
-    h2 {{
-        margin:10px 0;
-        color:#00d9ff;
     }}
     </style>
 
     <div class="box">
-        <img src="/{LOGO}" class="logo">
+        <img src="/logo" class="logo">
         <h2>{APP_NAME}</h2>
         <h3>🚀 Login</h3>
 
@@ -184,8 +170,8 @@ def home():
     </style>
 
     <div class="box">
-        <img src="/{{logo}}" class="logo">
-        <h2 style="text-align:center;">{{app_name}}</h2>
+        <img src="/logo" class="logo">
+        <h2 style="text-align:center;">Telegram Master Panel 🚀</h2>
 
         <a href="/logout">Logout</a><br><br>
 
@@ -224,18 +210,14 @@ def home():
     </script>
     """
 
-    return render_template_string(
-        HTML,
-        user_data=user_data,
-        result=result,
-        logo=LOGO,
-        app_name=APP_NAME
-    )
+    return render_template_string(HTML, user_data=user_data, result=result)
 
+# ---------------- LOGOUT ----------------
 @app.route("/logout")
 def logout():
     session.clear()
     return redirect("/login")
 
+# ---------------- RUN ----------------
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 5000)))
