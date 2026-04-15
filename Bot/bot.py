@@ -4,7 +4,7 @@ import sqlite3, requests, os
 app = Flask(__name__)
 app.secret_key = "secret123"
 
-APP_NAME = "Telegram Master Panel"
+APP_NAME = "Sender SaaS"
 LOGO = "https://cdn-icons-png.flaticon.com/512/906/906334.png"
 
 DB = "data.db"
