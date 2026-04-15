@@ -4,7 +4,7 @@ import requests, json, os
 app = Flask(__name__)
 app.secret_key = "123456"
 
-CONFIG_FILE = "config.json"
+CONFIG_FILE = "Bot/config.json"
 
 # ---------------- CONFIG ----------------
 def load_config():
