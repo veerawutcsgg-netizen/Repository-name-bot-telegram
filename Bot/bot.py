@@ -1,7 +1,6 @@
-from flask import Flask, request, session, redirect, send_from_directory
+from flask import Flask, request, session, redirect
 import json, os, time, random
 from telethon import TelegramClient
-from telethon.errors import SessionPasswordNeededError
 
 app = Flask(__name__)
 app.secret_key = "secret123"
@@ -21,41 +20,31 @@ def save_config(data):
     with open(CONFIG_FILE, "w") as f:
         json.dump(data, f, indent=2)
 
-# ---------------- LOGO ---------------- #
-@app.route("/logo")
-def logo():
-    return send_from_directory(".", "logo.png")
-
 # ---------------- LOGIN ---------------- #
-@app.route("/", methods=["GET", "POST"])
+@app.route("/", methods=["GET","POST"])
 def login():
     if request.method == "POST":
-        user = request.form["user"]
-        password = request.form["password"]
         data = load_config()
+        u = request.form["user"]
+        p = request.form["password"]
 
-        if user in data["users"] and data["users"][user]["password"] == password:
-            session["user"] = user
+        if u in data["users"] and data["users"][u]["password"] == p:
+            session["user"] = u
             return redirect("/panel")
 
     return """
     <style>
     body{background:#0b0f1a;color:white;text-align:center;font-family:sans-serif}
-    .box{margin-top:120px}
-    input{padding:14px;margin:8px;border-radius:8px;border:none;width:280px}
-    button{padding:12px 40px;background:#ffd700;border:none;border-radius:8px}
-    img{width:260px}
+    input{padding:14px;margin:8px;border-radius:8px;border:none;width:260px}
+    button{padding:12px 30px;background:#ffd700;border:none;border-radius:8px}
     </style>
 
-    <div class="box">
-    <img src="/logo">
     <h1>Telegram Master Panel 🚀</h1>
     <form method="post">
     <input name="user"><br>
     <input name="password"><br>
     <button>Login</button>
     </form>
-    </div>
     """
 
 # ---------------- PANEL ---------------- #
@@ -69,134 +58,70 @@ def panel():
     u = data["users"][user]
 
     groups_html = ""
-    for g in u.get("groups", []):
-        groups_html += f"<label><input type='checkbox' name='groups' value='{g['id']}'> {g['name']}</label><br>"
+    for i,g in enumerate(u.get("groups", [])):
+        groups_html += f"""
+        <div style='margin:6px 0'>
+        <input type='checkbox' name='groups' value='{g['id']}'> {g['name']}
+        <a href='/del_group/{i}' style='color:red'>❌</a>
+        </div>
+        """
 
     return f"""
     <style>
     body{{background:#0b0f1a;color:white;font-family:sans-serif}}
-    .box{{max-width:500px;margin:auto;padding-top:30px}}
-    input,textarea{{width:100%;padding:14px;margin:6px 0;border:none;border-radius:8px}}
-    button{{background:#ffd700;padding:14px;border:none;border-radius:8px;width:100%}}
+    .box{{max-width:500px;margin:auto}}
+    input,textarea{{width:100%;padding:14px;margin:6px 0;border-radius:8px;border:none}}
+    button{{background:#ffd700;padding:12px;border:none;border-radius:8px;width:100%}}
+    h3{{margin-top:20px}}
     </style>
 
     <div class="box">
-    <img src="/logo" style="display:block;margin:auto;width:200px">
-    <h2>👑 USER: {user}</h2>
-
-    <h3>🔑 Token</h3>
-    <form method="post" action="/save_token">
-    <input name="token" value="{u.get("token","")}">
-    <button>Save</button></form>
+    <h2>👑 {user}</h2>
 
     <h3>UserBot API</h3>
     <form method="post" action="/save_api">
-    <input name="api_id" value="{u.get("api_id","")}">
-    <input name="api_hash" value="{u.get("api_hash","")}">
-    <button>Save</button></form>
+    <input name="api_id" value="{u.get("api_id","")}" placeholder="API_ID">
+    <input name="api_hash" value="{u.get("api_hash","")}" placeholder="API_HASH">
+    <button>Save</button>
+    </form>
 
-    <h3>Login UserBot</h3>
-    <form method="post" action="/send_code">
-    <input name="phone" value="{session.get("phone","")}" placeholder="+855xxxxxxxx">
-    <button>Send Code</button></form>
-
-    <form method="post" action="/verify">
-    <input name="code" placeholder="OTP">
-    <button>Verify</button></form>
-
+    <h3>Fetch Groups (สูงสุด 10)</h3>
     <form method="post" action="/fetch">
-    <button>Fetch Groups</button></form>
+    <button>Fetch</button>
+    </form>
 
-    <h3>📢 Send</h3>
+    <h3>เพิ่มกลุ่มเอง</h3>
+    <form method="post" action="/add_group">
+    <input name="gid" placeholder="Group ID">
+    <input name="name" placeholder="Group Name">
+    <button>Add</button>
+    </form>
+
+    <h3>รายการกลุ่ม</h3>
     <form method="post" action="/send" enctype="multipart/form-data">
     {groups_html}
-    <textarea name="msg"></textarea>
-    <input type="file" name="file">
-    <button>Send</button></form>
 
-    <a href="/logout">Logout</a>
+    <h3>📢 ส่งข้อความ</h3>
+    <textarea name="msg" placeholder="พิมข้อความ..."></textarea>
+    <input type="file" name="file">
+    <button>Send</button>
+    </form>
     </div>
     """
 
-# ---------------- SAVE ---------------- #
-@app.route("/save_token", methods=["POST"])
-def save_token():
-    user = session["user"]
-    data = load_config()
-    data["users"][user]["token"] = request.form["token"]
-    save_config(data)
-    return redirect("/panel")
-
+# ---------------- SAVE API ---------------- #
 @app.route("/save_api", methods=["POST"])
 def save_api():
     user = session["user"]
     data = load_config()
+
     data["users"][user]["api_id"] = request.form["api_id"]
     data["users"][user]["api_hash"] = request.form["api_hash"]
+
     save_config(data)
     return redirect("/panel")
 
-# ---------------- SEND CODE ---------------- #
-@app.route("/send_code", methods=["POST"])
-def send_code():
-    user = session["user"]
-    data = load_config()
-    u = data["users"][user]
-
-    phone = request.form["phone"]
-
-    if not phone:
-        return "❌ ใส่เบอร์ก่อน"
-
-    session["phone"] = phone
-
-    try:
-        client = TelegramClient(
-            f"{SESSION_DIR}/{user}.session",
-            int(u["api_id"]),
-            u["api_hash"]
-        )
-        client.connect()
-
-        if client.is_user_authorized():
-            return "⚠️ login อยู่แล้ว"
-
-        client.send_code_request(phone)
-
-        return redirect("/panel")
-
-    except Exception as e:
-        return f"❌ ERROR: {str(e)}"
-
-# ---------------- VERIFY ---------------- #
-@app.route("/verify", methods=["POST"])
-def verify():
-    user = session["user"]
-    data = load_config()
-    u = data["users"][user]
-
-    phone = session.get("phone")
-    code = request.form["code"]
-
-    if not phone:
-        return "❌ กด Send Code ก่อน"
-
-    try:
-        client = TelegramClient(
-            f"{SESSION_DIR}/{user}.session",
-            int(u["api_id"]),
-            u["api_hash"]
-        )
-
-        client.connect()
-        client.sign_in(phone, code)
-
-        return redirect("/panel")
-
-    except Exception as e:
-        return f"❌ ERROR: {str(e)}"
-
-# ---------------- FETCH (FIXED) ---------------- #
+# ---------------- FETCH ---------------- #
 @app.route("/fetch", methods=["POST"])
 def fetch():
     user = session["user"]
@@ -205,15 +130,11 @@ def fetch():
 
     try:
         client = TelegramClient(
-            f"{SESSION_DIR}/{user}.session",
+            f"{SESSION_DIR}/{user}",
             int(u["api_id"]),
             u["api_hash"]
         )
-
         client.connect()
-
-        if not client.is_user_authorized():
-            return "❌ ยังไม่ได้ login"
 
         groups = []
         for d in client.get_dialogs():
@@ -223,13 +144,44 @@ def fetch():
                     "name": d.name
                 })
 
-        data["users"][user]["groups"] = groups
+        data["users"][user]["groups"] = groups[:10]
         save_config(data)
 
         return redirect("/panel")
 
     except Exception as e:
         return f"❌ FETCH ERROR: {str(e)}"
+
+# ---------------- ADD GROUP ---------------- #
+@app.route("/add_group", methods=["POST"])
+def add_group():
+    user = session["user"]
+    data = load_config()
+
+    gid = request.form["gid"]
+    name = request.form["name"]
+
+    data["users"][user].setdefault("groups", []).append({
+        "id": gid,
+        "name": name or gid
+    })
+
+    save_config(data)
+    return redirect("/panel")
+
+# ---------------- DELETE ---------------- #
+@app.route("/del_group/<int:index>")
+def del_group(index):
+    user = session["user"]
+    data = load_config()
+
+    try:
+        data["users"][user]["groups"].pop(index)
+        save_config(data)
+    except:
+        pass
+
+    return redirect("/panel")
 
 # ---------------- SEND ---------------- #
 @app.route("/send", methods=["POST"])
@@ -244,7 +196,7 @@ def send():
 
     try:
         client = TelegramClient(
-            f"{SESSION_DIR}/{user}.session",
+            f"{SESSION_DIR}/{user}",
             int(u["api_id"]),
             u["api_hash"]
         )
@@ -263,23 +215,16 @@ def send():
                     client.send_message(int(gid), msg)
 
                 ok += 1
-                time.sleep(random.uniform(1, 2))
+                time.sleep(random.uniform(1, 2.5))
 
             except:
                 fail += 1
 
-        return f"<h2>✅ {ok} success | ❌ {fail} fail</h2><a href='/panel'>Back</a>"
+        return f"<h2>✅ {ok} สำเร็จ | ❌ {fail} ล้มเหลว</h2><a href='/panel'>กลับ</a>"
 
     except Exception as e:
         return f"❌ SEND ERROR: {str(e)}"
 
-# ---------------- LOGOUT ---------------- #
-@app.route("/logout")
-def logout():
-    session.clear()
-    return redirect("/")
-
 # ---------------- RUN ---------------- #
 if __name__ == "__main__":
-    port = int(os.environ.get("PORT", 5000))
-    app.run(host="0.0.0.0", port=port)
+    app.run(host="0.0.0.0", port=5000)
