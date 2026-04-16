@@ -1,429 +1,225 @@
-from flask import Flask, request, session, redirect, send_from_directory
+from flask import Flask, request, session, redirect, send_from_directory, render_template_string
 import json, os, requests
 
 app = Flask(__name__)
 app.secret_key = "secret123"
 
 CONFIG_FILE = "Bot/config.json"
+os.makedirs("Bot", exist_ok=True)
 
-# ---------------- LOGO ----------------
+# ---------- INIT CONFIG ----------
+if not os.path.exists(CONFIG_FILE):
+    with open(CONFIG_FILE, "w") as f:
+        json.dump({
+            "users":{
+                "admin":{
+                    "password":"1234",
+                    "role":"admin",
+                    "token":"",
+                    "groups":[]
+                }
+            }
+        }, f, indent=2)
+
+# ---------- LOGO ----------
 @app.route("/logo")
 def logo():
     return send_from_directory(".", "logo.png")
 
-# ---------------- CONFIG ----------------
+# ---------- CONFIG ----------
 def load_config():
-    if not os.path.exists(CONFIG_FILE):
-        return {"users": {"admin": {
-            "password": "1234",
-            "role": "admin",
-            "token": "",
-            "groups": []
-        }}}
-    with open(CONFIG_FILE, "r") as f:
+    with open(CONFIG_FILE) as f:
         return json.load(f)
 
-def save_config(data):
+def save_config(d):
     with open(CONFIG_FILE, "w") as f:
-        json.dump(data, f, indent=2)
+        json.dump(d, f, indent=2)
 
-# ---------------- LANGUAGE ----------------
+# ---------- LANGUAGE ----------
 TEXT = {
-    "th": {
-        "login":"เข้าสู่ระบบ","user":"ผู้ใช้","pass":"รหัสผ่าน",
-        "token":"โทเคน","save":"บันทึก","add_group":"เพิ่มกลุ่ม",
-        "group":"กลุ่ม","send":"ส่งข้อความ","logout":"ออกจากระบบ",
-        "add_user":"เพิ่มยูส","report":"ส่งสำเร็จ"
-    },
-    "en": {
-        "login":"Login","user":"User","pass":"Password",
-        "token":"Token","save":"Save","add_group":"Add Group",
-        "group":"Groups","send":"Send","logout":"Logout",
-        "add_user":"Add User","report":"Success"
-    }
+    "th":{"login":"เข้าสู่ระบบ","user":"ผู้ใช้","pass":"รหัสผ่าน","token":"โทเคน","save":"บันทึก","add_group":"เพิ่มกลุ่ม","group":"กลุ่ม","send":"ส่งข้อความ","logout":"ออกจากระบบ","msg":"ข้อความ","report":"ส่งสำเร็จ"},
+    "en":{"login":"Login","user":"User","pass":"Password","token":"Token","save":"Save","add_group":"Add Group","group":"Groups","send":"Send","logout":"Logout","msg":"Message","report":"Success"}
 }
 
 def t(k):
-    return TEXT.get(session.get("lang","th"))[k]
+    return TEXT[session.get("lang","th")][k]
 
 @app.route("/lang/<l>")
-def change_lang(l):
-    if l not in ["th","en"]:
-        l = "th"
-    session["lang"] = l
+def lang(l):
+    session["lang"] = l if l in ["th","en"] else "th"
     return redirect(request.referrer or "/panel")
 
-# ---------------- LOGIN ----------------
+# ---------- LOGIN ----------
 @app.route("/", methods=["GET","POST"])
 def login():
-    if request.method == "POST":
-        data = load_config()
-        u = request.form["user"]
-        p = request.form["password"]
-
-        if u in data["users"] and data["users"][u]["password"] == p:
-            session["user"] = u
+    if request.method=="POST":
+        d=load_config()
+        u=request.form["user"]
+        p=request.form["password"]
+        if u in d["users"] and d["users"][u]["password"]==p:
+            session["user"]=u
             return redirect("/panel")
 
-    return f"""
+    return render_template_string("""
     <style>
-    body{{background:#020617;color:white;text-align:center;font-family:sans-serif}}
-    .box{{margin-top:120px}}
-    input{{padding:15px;width:300px;margin:10px;border-radius:10px}}
-    button{{padding:15px 30px;background:#facc15;border:none;border-radius:10px}}
-    img{{width:200px;margin-bottom:20px}}
+    body{background:#020617;color:white;text-align:center;font-family:sans-serif}
+    input{padding:15px;width:280px;margin:10px;border-radius:10px}
+    button{padding:12px 30px;background:#facc15;border:none;border-radius:10px}
     </style>
 
     <div style="position:absolute;top:10px;right:20px">
-        🌐 <a href="/lang/th">TH</a> | <a href="/lang/en">EN</a>
+    <a href="/lang/th">TH</a> | <a href="/lang/en">EN</a>
     </div>
 
-    <div class='box'>
-        <img src='/logo'>
-        <h1>🚀 Telegram Master Panel</h1>
-        <form method='post'>
-            <input name='user' placeholder='{t("user")}'><br>
-            <input name='password' type='password' placeholder='{t("pass")}'><br>
-            <button>{t("login")}</button>
-        </form>
+    <div style="margin-top:120px">
+    <img src="/logo" width=150>
+    <h2>Telegram Panel</h2>
+    <form method="post">
+    <input name="user" placeholder="{{t('user')}}"><br>
+    <input name="password" type="password" placeholder="{{t('pass')}}"><br>
+    <button>{{t('login')}}</button>
+    </form>
     </div>
-    """
+    """, t=t)
 
-# ---------------- PANEL ----------------
+# ---------- PANEL ----------
 @app.route("/panel")
 def panel():
     if "user" not in session:
         return redirect("/")
 
-    data = load_config()
-    user = session["user"]
-    u = data["users"][user]
+    d=load_config()
+    u=d["users"][session["user"]]
+    report=session.pop("report","")
 
-    report = session.pop("report","")
+    return render_template_string("""
+    <style>
+    body{background:#000;color:white;font-family:sans-serif}
+    .box{max-width:500px;margin:auto;padding:15px}
+    .card{background:#111;padding:15px;border-radius:10px;margin-bottom:10px}
+    input,textarea{width:100%;padding:10px;margin:5px;border-radius:10px}
+    button{background:#facc15;border:none;padding:10px;border-radius:10px;width:100%}
+    </style>
 
-    groups_html = ""
-    for g in u["groups"]:
-        groups_html += f"""
-        <div>
-        <input type='checkbox' name='gid' value='{g["id"]}'>
-        {g["name"]} ({g["id"]})
-        <a href='/del_group/{g["id"]}' style='color:red'>❌</a>
-        </div>
-        """
+    <div style="position:absolute;top:10px;right:20px">
+    <a href="/lang/th">TH</a> | <a href="/lang/en">EN</a>
+    </div>
 
-    admin_html = ""
-    if u["role"] == "admin":
-        users_list = ""
-        for name in data["users"]:
-            if name == "admin": continue
-            users_list += f"""
-            <div style='margin:10px;padding:10px;background:#111'>
-                👤 {name}
-                <form method='post' action='/change_pass' style='display:inline'>
-                    <input type='hidden' name='user' value='{name}'>
-                    <input name='newpass' placeholder='New pass'>
-                    <button>🔑</button>
-                </form>
-                <a href='/del_user/{name}'>❌</a>
-            </div>
-            """
+    <div class="box">
 
-        admin_html = f"""
-        <h3>👑 Admin</h3>
-        <form method='post' action='/add_user'>
-            <input name='user' placeholder='username'>
-            <input name='pass' placeholder='password'>
-            <button>Add</button>
-        </form>
-        {users_list}
-        """
+    <img src="/logo" width=120 style="display:block;margin:auto">
 
-    return f"""
-<!DOCTYPE html>
-<html>
-<head>
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<style>
+    {% if report %}
+    <div style="color:lime">{{report}}</div>
+    {% endif %}
 
-body {{
-    margin:0;
-    font-family: 'Segoe UI', sans-serif;
-    background: linear-gradient(180deg,#000,#020617);
-    color:white;
-}}
+    <div class="card">
+    <form method="post" action="/save_token">
+    <h3>{{t("token")}}</h3>
+    <input name="token" value="{{u['token']}}">
+    <button>{{t("save")}}</button>
+    </form>
+    </div>
 
-.container {{
-    max-width:500px;
-    margin:auto;
-    padding:15px;
-}}
+    <div class="card">
+    <form method="post" action="/add_group">
+    <input name="gid" placeholder="ID">
+    <input name="name" placeholder="Name">
+    <button>Add</button>
+    </form>
+    </div>
 
-.card {{
-    background:#0f172a;
-    border-radius:20px;
-    padding:15px;
-    margin-bottom:15px;
-    box-shadow:0 0 20px rgba(255,0,0,0.15);
-}}
+    <div class="card">
 
-.logo {{
-    display:block;
-    margin:auto;
-    width:140px;
-    margin-bottom:10px;
-}}
+    <label><input type="checkbox" onclick="allg(this)"> ALL</label>
 
-h2 {{
-    text-align:center;
-}}
+    <form method="post" action="/send">
+    {% for g in u['groups'] %}
+    <div>
+    <input type="checkbox" name="gid" value="{{g['id']}}">
+    {{g['name']}}
+    <a href="/del_group/{{g['id']}}">❌</a>
+    </div>
+    {% endfor %}
 
-input, textarea {{
-    width:100%;
-    padding:14px;
-    border-radius:12px;
-    border:none;
-    margin:6px 0;
-    background:#1e293b;
-    color:white;
-}}
+    <textarea name="msg" placeholder="{{t('msg')}}"></textarea>
 
-button {{
-    width:100%;
-    padding:14px;
-    border:none;
-    border-radius:12px;
-    background:linear-gradient(180deg,#FFD700,#FFC107);
-    font-weight:bold;
-}}
+    <button>{{t("send")}}</button>
+    </form>
 
-.group-row {{
-    display:flex;
-    justify-content:space-between;
-    align-items:center;
-    padding:8px;
-    border-bottom:1px solid #333;
-}}
+    </div>
 
-.dropzone {{
-    border:2px dashed #555;
-    padding:20px;
-    text-align:center;
-    border-radius:15px;
-    margin-top:10px;
-    cursor:pointer;
-}}
+    <a href="/logout">{{t("logout")}}</a>
 
-.preview img, .preview video {{
-    width:100%;
-    margin-top:10px;
-    border-radius:10px;
-}}
+    </div>
 
-.topbar {{
-    position:absolute;
-    top:10px;
-    right:15px;
-}}
+    <script>
+    function allg(s){
+        let c=document.getElementsByName("gid");
+        for(let i=0;i<c.length;i++) c[i].checked=s.checked;
+    }
+    </script>
+    """, u=u, t=t, report=report)
 
-</style>
-</head>
-
-<body>
-
-<div class="topbar">
-🌐 <a href="/lang/th">TH</a> | <a href="/lang/en">EN</a>
-</div>
-
-<div class="container">
-
-<img src="/logo" class="logo">
-
-<h2>👑 {user}</h2>
-
-{f"<div style='color:#4ade80;text-align:center'>{report}</div>" if report else ""}
-
-<div class="card">
-<h3>🔑 Token</h3>
-<form method="post" action="/save_token">
-<input name="token" value="{u["token"]}">
-<button>Save</button>
-</form>
-</div>
-
-<div class="card">
-<h3>➕ Add Group</h3>
-<form method="post" action="/add_group">
-<input name="gid" placeholder="Group ID">
-<input name="name" placeholder="Group Name">
-<button>Add</button>
-</form>
-</div>
-
-<div class="card">
-<h3>📋 Groups</h3>
-
-<label><input type="checkbox" onclick="toggle(this)"> ALL</label>
-
-<form method="post" action="/send" enctype="multipart/form-data">
-
-{"".join([f'''
-<div class="group-row">
-<label>
-<input type="checkbox" name="gid" value="{g["id"]}">
-{g["name"]}
-</label>
-<a href="/del_group/{g["id"]}">❌</a>
-</div>
-''' for g in u["groups"]])}
-
-<h3>📤 Message</h3>
-<textarea name="msg"></textarea>
-
-<div class="dropzone" id="drop">
-📂 Drag & Drop Image/Video
-<input type="file" name="file" id="file" hidden>
-</div>
-
-<div class="preview" id="preview"></div>
-
-<button type="submit">🚀 Send</button>
-
-</form>
-</div>
-
-{admin_html}
-
-<a href="/logout" style="display:block;text-align:center">Logout</a>
-
-</div>
-
-<script>
-function toggle(source){{
-    let c=document.getElementsByName('gid');
-    for(let i=0;i<c.length;i++) c[i].checked = source.checked;
-}}
-
-let drop = document.getElementById('drop');
-let file = document.getElementById('file');
-let preview = document.getElementById('preview');
-
-drop.onclick = () => file.click();
-
-drop.ondragover = e => e.preventDefault();
-
-drop.ondrop = e => {{
-    e.preventDefault();
-    file.files = e.dataTransfer.files;
-    show(file.files[0]);
-}};
-
-file.onchange = () => show(file.files[0]);
-
-function show(f){{
-    preview.innerHTML="";
-    if(!f) return;
-
-    if(f.type.startsWith("image")){{
-        preview.innerHTML = `<img src="${{URL.createObjectURL(f)}}">`;
-    }} else if(f.type.startsWith("video")){{
-        preview.innerHTML = `<video controls src="${{URL.createObjectURL(f)}}"></video>`;
-    }}
-}}
-</script>
-
-</body>
-</html>
-"""
-
-# ---------------- SAVE TOKEN ----------------
+# ---------- SAVE ----------
 @app.route("/save_token", methods=["POST"])
 def save_token():
-    data = load_config()
-    data["users"][session["user"]]["token"] = request.form["token"]
-    save_config(data)
+    d=load_config()
+    d["users"][session["user"]]["token"]=request.form["token"]
+    save_config(d)
     return redirect("/panel")
 
-# ---------------- GROUP ----------------
 @app.route("/add_group", methods=["POST"])
 def add_group():
-    data = load_config()
-    data["users"][session["user"]]["groups"].append({
-        "id": request.form["gid"],
-        "name": request.form["name"]
+    d=load_config()
+    d["users"][session["user"]]["groups"].append({
+        "id":request.form["gid"],
+        "name":request.form["name"]
     })
-    save_config(data)
+    save_config(d)
     return redirect("/panel")
 
 @app.route("/del_group/<gid>")
 def del_group(gid):
-    data = load_config()
-    user = session["user"]
-    data["users"][user]["groups"] = [g for g in data["users"][user]["groups"] if g["id"] != gid]
-    save_config(data)
+    d=load_config()
+    u=session["user"]
+    d["users"][u]["groups"]=[g for g in d["users"][u]["groups"] if g["id"]!=gid]
+    save_config(d)
     return redirect("/panel")
 
-# ---------------- SEND ----------------
+# ---------- SEND ----------
 @app.route("/send", methods=["POST"])
 def send():
-    data = load_config()
-    u = data["users"][session["user"]]
+    d=load_config()
+    u=d["users"][session["user"]]
 
-    success = 0
+    selected=request.form.getlist("gid")
+    msg=request.form["msg"]
+
+    success=0
+
     for g in u["groups"]:
+        if g["id"] not in selected:
+            continue
         try:
             requests.post(
                 f"https://api.telegram.org/bot{u['token']}/sendMessage",
-                data={"chat_id": g["id"], "text": request.form["msg"]}
+                data={"chat_id":g["id"],"text":msg}
             )
-            success += 1
+            success+=1
         except:
             pass
 
-    session["report"] = f"✅ {t('report')} {success} กลุ่ม"
+    session["report"]=f"✅ {t('report')} {success}"
     return redirect("/panel")
 
-# ---------------- ADMIN ----------------
-@app.route("/add_user", methods=["POST"])
-def add_user():
-    data = load_config()
-    if data["users"][session["user"]]["role"] != "admin":
-        return "no"
-
-    data["users"][request.form["user"]] = {
-        "password": request.form["pass"],
-        "role": "user",
-        "token": "",
-        "groups": []
-    }
-
-    save_config(data)
-    return redirect("/panel")
-
-@app.route("/change_pass", methods=["POST"])
-def change_pass():
-    data = load_config()
-    if data["users"][session["user"]]["role"] != "admin":
-        return "no"
-
-    data["users"][request.form["user"]]["password"] = request.form["newpass"]
-    save_config(data)
-    return redirect("/panel")
-
-@app.route("/del_user/<u>")
-def del_user(u):
-    data = load_config()
-    if u != "admin":
-        data["users"].pop(u, None)
-    save_config(data)
-    return redirect("/panel")
-
-# ---------------- LOGOUT ----------------
+# ---------- LOGOUT ----------
 @app.route("/logout")
 def logout():
     session.clear()
     return redirect("/")
 
-# ---------------- RUN ----------------
-if __name__ == "__main__":
-    port = int(os.environ.get("PORT", 5000))
-    app.run(host="0.0.0.0", port=port)
+# ---------- RUN ----------
+if __name__=="__main__":
+    port=int(os.environ.get("PORT",5000))
+    app.run(host="0.0.0.0",port=port)
