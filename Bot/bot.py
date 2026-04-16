@@ -1,234 +1,215 @@
-from flask import Flask, request, session, redirect
-import json, os
-from telethon import TelegramClient
+from flask import Flask, request, session, redirect, render_template_string
+import json, os, requests
 
 app = Flask(__name__)
-app.secret_key = "secret123"
+app.secret_key = "supersecret"
 
-BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-CONFIG_FILE = os.path.join(BASE_DIR, "config.json")
-SESSION_DIR = os.path.join(BASE_DIR, "sessions")
+# 🔥 ใช้ path ปลอดภัย (Railway ใช้ root)
+CONFIG_FILE = "config.json"
 
-os.makedirs(SESSION_DIR, exist_ok=True)
 
-# ---------------- CONFIG ---------------- #
-
+# ---------------- CONFIG ----------------
 def load_config():
     if not os.path.exists(CONFIG_FILE):
+        default = {
+            "users": {
+                "admin": {
+                    "password": "1234",
+                    "token": "",
+                    "groups": []
+                }
+            }
+        }
+        with open(CONFIG_FILE, "w") as f:
+            json.dump(default, f, indent=2)
+        return default
+
+    try:
+        with open(CONFIG_FILE, "r") as f:
+            return json.load(f)
+    except:
         return {"users": {}}
-    with open(CONFIG_FILE, "r") as f:
-        return json.load(f)
+
 
 def save_config(data):
     with open(CONFIG_FILE, "w") as f:
         json.dump(data, f, indent=2)
 
-# ---------------- LOGIN ---------------- #
 
-@app.route("/", methods=["GET","POST"])
+# ---------------- LOGIN ----------------
+@app.route("/login", methods=["GET", "POST"])
 def login():
-    if request.method == "POST":
-        data = load_config()
-        u = request.form["user"]
-        p = request.form["password"]
+    cfg = load_config()
 
-        if u in data["users"] and data["users"][u]["password"] == p:
+    if request.method == "POST":
+        u = request.form.get("user")
+        p = request.form.get("pw")
+
+        if u in cfg["users"] and cfg["users"][u]["password"] == p:
             session["user"] = u
-            return redirect("/panel")
+            return redirect("/")
 
         return "❌ Login Failed"
 
     return """
-    <h2 style='text-align:center'>Telegram Master Panel 🚀</h2>
-    <form method="post" style="text-align:center">
-        <input name="user" placeholder="User"><br><br>
-        <input name="password" placeholder="Password"><br><br>
-        <button>Login</button>
+    <h2>Login</h2>
+    <form method="post">
+    <input name="user"><br>
+    <input name="pw" type="password"><br>
+    <button>Login</button>
     </form>
     """
 
-# ---------------- PANEL ---------------- #
 
-@app.route("/panel")
-def panel():
+# ---------------- HOME ----------------
+@app.route("/", methods=["GET", "POST"])
+def home():
     if "user" not in session:
-        return redirect("/")
+        return redirect("/login")
 
+    cfg = load_config()
     user = session["user"]
-    data = load_config()
-    u = data["users"][user]
-    groups = u.get("groups", [])
+    data = cfg["users"][user]
+    is_admin = user == "admin"
+    msg = ""
 
-    group_html = ""
-    for g in groups:
-        group_html += f"""
-        <div>
-            {g['name']} ({g['id']})
-            <a href='/del_group?id={g['id']}'>❌</a>
-        </div>
-        """
+    if request.method == "POST":
+        action = request.form.get("action")
 
-    return f"""
-    <h2>👑 USER: {user}</h2>
+        try:
+            # -------- ADMIN --------
+            if is_admin:
+                if action == "add_user":
+                    u = request.form.get("new_user")
+                    p = request.form.get("new_pw")
 
-    <h3>🔑 Token</h3>
-    <form method="post" action="/save_token">
-        <input name="token" value="{u.get("token","")}">
-        <button>Save</button>
+                    if u in cfg["users"]:
+                        msg = "❌ user ซ้ำ"
+                    else:
+                        cfg["users"][u] = {
+                            "password": p,
+                            "token": "",
+                            "groups": []
+                        }
+                        msg = "✅ เพิ่ม user แล้ว"
+
+                elif action == "delete_user":
+                    u = request.form.get("del_user")
+                    if u != "admin":
+                        cfg["users"].pop(u, None)
+
+                elif action == "change_user_pw":
+                    u = request.form.get("edit_user")
+                    pw = request.form.get("edit_pw")
+                    if u in cfg["users"]:
+                        cfg["users"][u]["password"] = pw
+
+            # -------- USER --------
+            if action == "change_my_pw":
+                data["password"] = request.form.get("mypw")
+
+            if action == "save_token":
+                data["token"] = request.form.get("token")
+
+            if action == "add_group":
+                data["groups"].append({
+                    "id": request.form.get("gid"),
+                    "name": request.form.get("gname")
+                })
+
+            # -------- SEND --------
+            if action == "send":
+                token = data.get("token", "")
+                gids = request.form.getlist("gids")
+                text = request.form.get("msg")
+
+                ok = 0
+                for g in gids:
+                    try:
+                        requests.post(
+                            f"https://api.telegram.org/bot{token}/sendMessage",
+                            data={"chat_id": g, "text": text},
+                            timeout=5
+                        )
+                        ok += 1
+                    except:
+                        pass
+
+                msg = f"✅ ส่ง {ok} กลุ่ม"
+
+            save_config(cfg)
+
+        except Exception as e:
+            msg = f"❌ ERROR: {str(e)}"
+
+    return render_template_string("""
+    <h2>USER: {{user}}</h2>
+
+    {% if is_admin %}
+    <h3>Admin Panel</h3>
+
+    <form method="post">
+        <input name="new_user" placeholder="user">
+        <input name="new_pw" placeholder="password">
+        <button name="action" value="add_user">Add</button>
     </form>
 
-    <h3>UserBot API</h3>
-    <form method="post" action="/save_api">
-        <input name="api_id" value="{u.get("api_id","")}" placeholder="API_ID">
-        <input name="api_hash" value="{u.get("api_hash","")}" placeholder="API_HASH">
-        <button>Save</button>
+    <hr>
+
+    {% for u in cfg.users %}
+        {% if u != "admin" %}
+        <form method="post">
+            {{u}}
+            <input name="edit_pw" placeholder="new pw">
+            <input type="hidden" name="edit_user" value="{{u}}">
+            <button name="action" value="change_user_pw">Edit</button>
+            <button name="action" value="delete_user" name="del_user" value="{{u}}">Delete</button>
+        </form>
+        {% endif %}
+    {% endfor %}
+    {% endif %}
+
+    <h3>Change Password</h3>
+    <form method="post">
+        <input name="mypw">
+        <button name="action" value="change_my_pw">Change</button>
     </form>
 
-    <br>
-    <form method="post" action="/fetch">
-        <button>Fetch Groups (Auto ≤10)</button>
+    <h3>Token</h3>
+    <form method="post">
+        <input name="token" value="{{data.token}}">
+        <button name="action" value="save_token">Save</button>
     </form>
 
-    <h3>➕ Add Group</h3>
-    <form method="post" action="/add_group">
+    <h3>Add Group</h3>
+    <form method="post">
         <input name="gid" placeholder="Group ID">
-        <input name="name" placeholder="Group Name">
-        <button>Add</button>
+        <input name="gname" placeholder="Name">
+        <button name="action" value="add_group">Add</button>
     </form>
 
-    <h3>📋 Groups</h3>
-    {group_html}
+    <h3>Send</h3>
+    <form method="post">
+        {% for g in data.groups %}
+            <input type="checkbox" name="gids" value="{{g.id}}"> {{g.name}}<br>
+        {% endfor %}
 
-    <h3>📤 Send Message</h3>
-    <form method="post" action="/send">
         <textarea name="msg"></textarea><br>
-        <button>Send</button>
+        <button name="action" value="send">Send</button>
     </form>
 
-    <br><a href="/logout">Logout</a>
-    """
+    <h3>{{msg}}</h3>
+    """, user=user, cfg=cfg, data=data, is_admin=is_admin, msg=msg)
 
-# ---------------- SAVE ---------------- #
 
-@app.route("/save_token", methods=["POST"])
-def save_token():
-    user = session["user"]
-    data = load_config()
-    data["users"][user]["token"] = request.form["token"]
-    save_config(data)
-    return redirect("/panel")
-
-@app.route("/save_api", methods=["POST"])
-def save_api():
-    user = session["user"]
-    data = load_config()
-    data["users"][user]["api_id"] = request.form["api_id"]
-    data["users"][user]["api_hash"] = request.form["api_hash"]
-    save_config(data)
-    return redirect("/panel")
-
-# ---------------- ADD GROUP ---------------- #
-
-@app.route("/add_group", methods=["POST"])
-def add_group():
-    user = session["user"]
-    data = load_config()
-
-    gid = request.form["gid"]
-    name = request.form["name"]
-
-    data["users"][user].setdefault("groups", []).append({
-        "id": gid,
-        "name": name
-    })
-
-    save_config(data)
-    return redirect("/panel")
-
-# ---------------- DELETE GROUP ---------------- #
-
-@app.route("/del_group")
-def del_group():
-    user = session["user"]
-    data = load_config()
-    gid = request.args.get("id")
-
-    groups = data["users"][user].get("groups", [])
-    data["users"][user]["groups"] = [g for g in groups if str(g["id"]) != gid]
-
-    save_config(data)
-    return redirect("/panel")
-
-# ---------------- FETCH ---------------- #
-
-@app.route("/fetch", methods=["POST"])
-def fetch():
-    user = session["user"]
-    data = load_config()
-    u = data["users"][user]
-
-    if not u.get("api_id") or not u.get("api_hash"):
-        return "❌ ใส่ API ก่อน"
-
-    try:
-        api_id = int(u["api_id"])
-    except:
-        return "❌ API_ID ต้องเป็นตัวเลข"
-
-    try:
-        client = TelegramClient(f"{SESSION_DIR}/{user}", api_id, u["api_hash"])
-        client.start()
-
-        dialogs = client.get_dialogs()
-        groups = []
-
-        for d in dialogs:
-            if d.is_group:
-                groups.append({"id": d.id, "name": d.name})
-
-        data["users"][user]["groups"] = groups[:10]
-        save_config(data)
-
-        return redirect("/panel")
-
-    except Exception as e:
-        return f"❌ ERROR: {str(e)}"
-
-# ---------------- SEND ---------------- #
-
-@app.route("/send", methods=["POST"])
-def send():
-    user = session["user"]
-    data = load_config()
-    u = data["users"][user]
-
-    msg = request.form["msg"]
-
-    if not msg:
-        return "❌ ใส่ข้อความก่อน"
-
-    try:
-        api_id = int(u["api_id"])
-        client = TelegramClient(f"{SESSION_DIR}/{user}", api_id, u["api_hash"])
-        client.start()
-
-        for g in u.get("groups", []):
-            client.send_message(int(g["id"]), msg)
-
-        return "✅ ส่งสำเร็จ"
-
-    except Exception as e:
-        return f"❌ ERROR: {str(e)}"
-
-# ---------------- LOGOUT ---------------- #
-
+# ---------------- LOGOUT ----------------
 @app.route("/logout")
 def logout():
     session.clear()
-    return redirect("/")
+    return redirect("/login")
 
-# ---------------- RUN ---------------- #
 
+# 🔥 สำคัญมาก (Railway fix crash)
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 5000))
     app.run(host="0.0.0.0", port=port)
