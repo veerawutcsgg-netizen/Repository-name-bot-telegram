@@ -139,58 +139,201 @@ def panel():
         """
 
     return f"""
-    <style>
-    body{{background:#020617;color:white;font-family:sans-serif;padding:20px}}
-    input,textarea{{width:100%;padding:10px;margin:5px;border-radius:10px}}
-    button{{background:#facc15;border:none;padding:10px;border-radius:10px}}
-    img{{width:150px;margin-bottom:10px}}
-    </style>
+<!DOCTYPE html>
+<html>
+<head>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
 
-    <div style="position:absolute;top:10px;right:20px">
-        🌐 <a href="/lang/th">TH</a> | <a href="/lang/en">EN</a>
-    </div>
+body {{
+    margin:0;
+    font-family: 'Segoe UI', sans-serif;
+    background: linear-gradient(180deg,#000,#020617);
+    color:white;
+}}
 
-    <img src='/logo'>
-    <h2>👑 USER: {user}</h2>
+.container {{
+    max-width:500px;
+    margin:auto;
+    padding:15px;
+}}
 
-    {f"<div style='color:lime'>{report}</div>" if report else ""}
+.card {{
+    background:#0f172a;
+    border-radius:20px;
+    padding:15px;
+    margin-bottom:15px;
+    box-shadow:0 0 20px rgba(255,0,0,0.15);
+}}
 
-    <form method='post' action='/save_token'>
-        <h3>{t("token")}</h3>
-        <input name='token' value='{u["token"]}'>
-        <button>{t("save")}</button>
-    </form>
+.logo {{
+    display:block;
+    margin:auto;
+    width:140px;
+    margin-bottom:10px;
+}}
 
-    <h3>{t("add_group")}</h3>
-    <form method='post' action='/add_group'>
-        <input name='gid' placeholder='Group ID'>
-        <input name='name' placeholder='Group Name'>
-        <button>Add</button>
-    </form>
+h2 {{
+    text-align:center;
+}}
 
-    <h3>{t("group")}</h3>
-    <input type='checkbox' onclick='toggle(this)'> ALL
-    {groups_html}
+input, textarea {{
+    width:100%;
+    padding:14px;
+    border-radius:12px;
+    border:none;
+    margin:6px 0;
+    background:#1e293b;
+    color:white;
+}}
 
-    <form method='post' action='/send'>
-        <h3>{t("send")}</h3>
-        <textarea name='msg'></textarea>
-        <button>{t("send")}</button>
-    </form>
+button {{
+    width:100%;
+    padding:14px;
+    border:none;
+    border-radius:12px;
+    background:linear-gradient(180deg,#FFD700,#FFC107);
+    font-weight:bold;
+}}
 
-    {admin_html}
+.group-row {{
+    display:flex;
+    justify-content:space-between;
+    align-items:center;
+    padding:8px;
+    border-bottom:1px solid #333;
+}}
 
-    <br><a href='/logout'>{t("logout")}</a>
+.dropzone {{
+    border:2px dashed #555;
+    padding:20px;
+    text-align:center;
+    border-radius:15px;
+    margin-top:10px;
+    cursor:pointer;
+}}
 
-    <script>
-    function toggle(source){{
-        let checkboxes = document.getElementsByName('gid');
-        for(let i=0;i<checkboxes.length;i++){{
-            checkboxes[i].checked = source.checked;
-        }}
+.preview img, .preview video {{
+    width:100%;
+    margin-top:10px;
+    border-radius:10px;
+}}
+
+.topbar {{
+    position:absolute;
+    top:10px;
+    right:15px;
+}}
+
+</style>
+</head>
+
+<body>
+
+<div class="topbar">
+🌐 <a href="/lang/th">TH</a> | <a href="/lang/en">EN</a>
+</div>
+
+<div class="container">
+
+<img src="/logo" class="logo">
+
+<h2>👑 {user}</h2>
+
+{f"<div style='color:#4ade80;text-align:center'>{report}</div>" if report else ""}
+
+<div class="card">
+<h3>🔑 Token</h3>
+<form method="post" action="/save_token">
+<input name="token" value="{u["token"]}">
+<button>Save</button>
+</form>
+</div>
+
+<div class="card">
+<h3>➕ Add Group</h3>
+<form method="post" action="/add_group">
+<input name="gid" placeholder="Group ID">
+<input name="name" placeholder="Group Name">
+<button>Add</button>
+</form>
+</div>
+
+<div class="card">
+<h3>📋 Groups</h3>
+
+<label><input type="checkbox" onclick="toggle(this)"> ALL</label>
+
+<form method="post" action="/send" enctype="multipart/form-data">
+
+{"".join([f'''
+<div class="group-row">
+<label>
+<input type="checkbox" name="gid" value="{g["id"]}">
+{g["name"]}
+</label>
+<a href="/del_group/{g["id"]}">❌</a>
+</div>
+''' for g in u["groups"]])}
+
+<h3>📤 Message</h3>
+<textarea name="msg"></textarea>
+
+<div class="dropzone" id="drop">
+📂 Drag & Drop Image/Video
+<input type="file" name="file" id="file" hidden>
+</div>
+
+<div class="preview" id="preview"></div>
+
+<button type="submit">🚀 Send</button>
+
+</form>
+</div>
+
+{admin_html}
+
+<a href="/logout" style="display:block;text-align:center">Logout</a>
+
+</div>
+
+<script>
+function toggle(source){{
+    let c=document.getElementsByName('gid');
+    for(let i=0;i<c.length;i++) c[i].checked = source.checked;
+}}
+
+let drop = document.getElementById('drop');
+let file = document.getElementById('file');
+let preview = document.getElementById('preview');
+
+drop.onclick = () => file.click();
+
+drop.ondragover = e => e.preventDefault();
+
+drop.ondrop = e => {{
+    e.preventDefault();
+    file.files = e.dataTransfer.files;
+    show(file.files[0]);
+}};
+
+file.onchange = () => show(file.files[0]);
+
+function show(f){{
+    preview.innerHTML="";
+    if(!f) return;
+
+    if(f.type.startsWith("image")){{
+        preview.innerHTML = `<img src="${{URL.createObjectURL(f)}}">`;
+    }} else if(f.type.startsWith("video")){{
+        preview.innerHTML = `<video controls src="${{URL.createObjectURL(f)}}"></video>`;
     }}
-    </script>
-    """
+}}
+</script>
+
+</body>
+</html>
+"""
 
 # ---------------- SAVE TOKEN ----------------
 @app.route("/save_token", methods=["POST"])
