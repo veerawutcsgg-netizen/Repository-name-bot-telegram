@@ -43,7 +43,7 @@ def login():
     body{background:#0b0f1a;color:white;text-align:center;font-family:sans-serif}
     .box{margin-top:120px}
     input{padding:14px;margin:8px;border-radius:8px;border:none;width:280px}
-    button{padding:12px 40px;background:#ffd700;border:none;border-radius:8px;font-size:16px}
+    button{padding:12px 40px;background:#ffd700;border:none;border-radius:8px}
     img{width:260px}
     </style>
 
@@ -51,8 +51,8 @@ def login():
     <img src="/logo">
     <h1>Telegram Master Panel 🚀</h1>
     <form method="post">
-    <input name="user" placeholder="User"><br>
-    <input name="password" placeholder="Password"><br>
+    <input name="user"><br>
+    <input name="password"><br>
     <button>Login</button>
     </form>
     </div>
@@ -77,13 +77,12 @@ def panel():
     body{{background:#0b0f1a;color:white;font-family:sans-serif}}
     .box{{max-width:500px;margin:auto;padding-top:30px}}
     input,textarea{{width:100%;padding:14px;margin:6px 0;border:none;border-radius:8px}}
-    button{{background:#ffd700;padding:14px;border:none;border-radius:8px;width:100%;font-size:16px}}
-    h2,h3{{margin-top:20px}}
+    button{{background:#ffd700;padding:14px;border:none;border-radius:8px;width:100%}}
     </style>
 
     <div class="box">
     <img src="/logo" style="display:block;margin:auto;width:200px">
-    <h2 style="text-align:center">👑 USER: {user}</h2>
+    <h2>👑 USER: {user}</h2>
 
     <h3>🔑 Token</h3>
     <form method="post" action="/save_token">
@@ -92,8 +91,8 @@ def panel():
 
     <h3>UserBot API</h3>
     <form method="post" action="/save_api">
-    <input name="api_id" value="{u.get("api_id","")}" placeholder="API_ID">
-    <input name="api_hash" value="{u.get("api_hash","")}" placeholder="API_HASH">
+    <input name="api_id" value="{u.get("api_id","")}">
+    <input name="api_hash" value="{u.get("api_hash","")}">
     <button>Save</button></form>
 
     <h3>Login UserBot</h3>
@@ -108,10 +107,10 @@ def panel():
     <form method="post" action="/fetch">
     <button>Fetch Groups</button></form>
 
-    <h3>📢 Send Message</h3>
+    <h3>📢 Send</h3>
     <form method="post" action="/send" enctype="multipart/form-data">
     {groups_html}
-    <textarea name="msg" placeholder="Message"></textarea>
+    <textarea name="msg"></textarea>
     <input type="file" name="file">
     <button>Send</button></form>
 
@@ -147,7 +146,7 @@ def send_code():
     phone = request.form["phone"]
 
     if not phone:
-        return "❌ กรุณาใส่เบอร์"
+        return "❌ ใส่เบอร์ก่อน"
 
     session["phone"] = phone
 
@@ -157,11 +156,10 @@ def send_code():
             int(u["api_id"]),
             u["api_hash"]
         )
-
         client.connect()
 
         if client.is_user_authorized():
-            return "⚠️ บัญชีนี้ login อยู่แล้ว"
+            return "⚠️ login อยู่แล้ว"
 
         client.send_code_request(phone)
 
@@ -181,7 +179,7 @@ def verify():
     code = request.form["code"]
 
     if not phone:
-        return "❌ กรุณากด Send Code ก่อน"
+        return "❌ กด Send Code ก่อน"
 
     try:
         client = TelegramClient(
@@ -195,38 +193,45 @@ def verify():
 
         return redirect("/panel")
 
-    except SessionPasswordNeededError:
-        return "❌ บัญชีมี 2FA"
-
     except Exception as e:
         return f"❌ ERROR: {str(e)}"
 
-# ---------------- FETCH GROUP ---------------- #
+# ---------------- FETCH (FIXED) ---------------- #
 @app.route("/fetch", methods=["POST"])
 def fetch():
     user = session["user"]
     data = load_config()
     u = data["users"][user]
 
-    client = TelegramClient(
-        f"{SESSION_DIR}/{user}.session",
-        int(u["api_id"]),
-        u["api_hash"]
-    )
+    try:
+        client = TelegramClient(
+            f"{SESSION_DIR}/{user}.session",
+            int(u["api_id"]),
+            u["api_hash"]
+        )
 
-    client.connect()
+        client.connect()
 
-    groups = []
-    for d in client.get_dialogs():
-        if d.is_group:
-            groups.append({"id": str(d.id), "name": d.name})
+        if not client.is_user_authorized():
+            return "❌ ยังไม่ได้ login"
 
-    data["users"][user]["groups"] = groups
-    save_config(data)
+        groups = []
+        for d in client.get_dialogs():
+            if d.is_group:
+                groups.append({
+                    "id": str(d.id),
+                    "name": d.name
+                })
 
-    return redirect("/panel")
+        data["users"][user]["groups"] = groups
+        save_config(data)
 
-# ---------------- SEND MESSAGE ---------------- #
+        return redirect("/panel")
+
+    except Exception as e:
+        return f"❌ FETCH ERROR: {str(e)}"
+
+# ---------------- SEND ---------------- #
 @app.route("/send", methods=["POST"])
 def send():
     user = session["user"]
@@ -237,32 +242,36 @@ def send():
     selected = request.form.getlist("groups")
     file = request.files.get("file")
 
-    client = TelegramClient(
-        f"{SESSION_DIR}/{user}.session",
-        int(u["api_id"]),
-        u["api_hash"]
-    )
-    client.connect()
+    try:
+        client = TelegramClient(
+            f"{SESSION_DIR}/{user}.session",
+            int(u["api_id"]),
+            u["api_hash"]
+        )
+        client.connect()
 
-    ok, fail = 0, 0
+        ok, fail = 0, 0
 
-    for gid in selected:
-        try:
-            if file and file.filename:
-                path = "temp_file"
-                file.save(path)
-                client.send_file(int(gid), path, caption=msg)
-                os.remove(path)
-            else:
-                client.send_message(int(gid), msg)
+        for gid in selected:
+            try:
+                if file and file.filename:
+                    path = "temp"
+                    file.save(path)
+                    client.send_file(int(gid), path, caption=msg)
+                    os.remove(path)
+                else:
+                    client.send_message(int(gid), msg)
 
-            ok += 1
-            time.sleep(random.uniform(1, 2))
+                ok += 1
+                time.sleep(random.uniform(1, 2))
 
-        except:
-            fail += 1
+            except:
+                fail += 1
 
-    return f"<h2>✅ ส่งสำเร็จ {ok} | ❌ ล้มเหลว {fail}</h2><a href='/panel'>กลับ</a>"
+        return f"<h2>✅ {ok} success | ❌ {fail} fail</h2><a href='/panel'>Back</a>"
+
+    except Exception as e:
+        return f"❌ SEND ERROR: {str(e)}"
 
 # ---------------- LOGOUT ---------------- #
 @app.route("/logout")
