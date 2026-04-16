@@ -25,20 +25,34 @@ if not os.path.exists(CONFIG):
         }, f, indent=2)
 
 def load():
-    return json.load(open(CONFIG))
+    with open(CONFIG) as f:
+        return json.load(f)
 
 def save(d):
-    json.dump(d, open(CONFIG,"w"), indent=2)
+    with open(CONFIG,"w") as f:
+        json.dump(d, f, indent=2)
 
 # ---------- LOGO ----------
 @app.route("/logo")
 def logo():
     return send_from_directory(BASE, "logo.png")
 
-# ---------- LANG ----------
+# ---------- LANGUAGE ----------
 TEXT = {
- "th":{"login":"เข้าสู่ระบบ","user":"ผู้ใช้","pass":"รหัสผ่าน","token":"โทเคน","save":"บันทึก","add_group":"เพิ่มกลุ่ม","send":"ส่งข้อความ","logout":"ออกจากระบบ","msg":"ข้อความ","add_user":"เพิ่มยูส","users":"รายการยูส"},
- "en":{"login":"Login","user":"User","pass":"Password","token":"Token","save":"Save","add_group":"Add Group","send":"Send","logout":"Logout","msg":"Message","add_user":"Add User","users":"User List"}
+ "th":{
+  "login":"เข้าสู่ระบบ","user":"ผู้ใช้","pass":"รหัสผ่าน",
+  "token":"โทเคน","save":"บันทึก","add_group":"เพิ่มกลุ่ม",
+  "send":"ส่งข้อความ","logout":"ออกจากระบบ",
+  "msg":"ข้อความ","add_user":"เพิ่มยูส",
+  "users":"รายการยูส","all":"ทั้งหมด"
+ },
+ "en":{
+  "login":"Login","user":"User","pass":"Password",
+  "token":"Token","save":"Save","add_group":"Add Group",
+  "send":"Send","logout":"Logout",
+  "msg":"Message","add_user":"Add User",
+  "users":"User List","all":"ALL"
+ }
 }
 
 def t(k):
@@ -75,9 +89,9 @@ def login():
     <img src="/logo" width=150>
     <h2>Telegram Panel</h2>
     <form method="post">
-    <input name="user"><br>
-    <input type="password" name="password"><br>
-    <button>Login</button>
+    <input name="user" placeholder="{t("user")}"><br>
+    <input type="password" name="password" placeholder="{t("pass")}"><br>
+    <button>{t("login")}</button>
     </form>
     </div>
     """
@@ -94,6 +108,7 @@ def panel():
 
     report = session.pop("report", "")
 
+    # groups
     groups=""
     for g in u["groups"]:
         gid_encoded = urllib.parse.quote(g["id"])
@@ -105,33 +120,35 @@ def panel():
         </div>
         """
 
+    # admin user list
     admin=""
     if u["role"]=="admin":
+
         user_list=""
         for uname,info in d["users"].items():
             user_list+=f"""
-            <div>
-            <b>{uname}</b>
-            <form method="post" action="/edit_user">
-            <input type="hidden" name="user" value="{uname}">
-            <input name="pass" placeholder="New Password">
-            <button>แก้รหัส</button>
-            </form>
+            <div style="margin-bottom:10px">
+                <b>{uname}</b>
+                <form method="post" action="/edit_user" style="display:flex;gap:5px;margin-top:5px">
+                    <input type="hidden" name="user" value="{uname}">
+                    <input name="pass" placeholder="New Password">
+                    <button>✔</button>
+                </form>
             </div>
             """
 
         admin=f"""
         <div class="card">
-        <h3>เพิ่มยูส</h3>
+        <h3>{t("add_user")}</h3>
         <form method="post" action="/add_user">
-        <input name="user">
-        <input name="pass">
-        <button>Add</button>
+            <input name="user" placeholder="Username">
+            <input name="pass" placeholder="Password">
+            <button>Add</button>
         </form>
         </div>
 
         <div class="card">
-        <h3>รายการยูส</h3>
+        <h3>{t("users")}</h3>
         {user_list}
         </div>
         """
@@ -143,7 +160,12 @@ body{{background:#000;color:white;font-family:sans-serif}}
 .card{{background:#111;padding:15px;margin:10px;border-radius:15px}}
 input,textarea{{width:100%;padding:10px;margin:5px;border-radius:10px}}
 button{{background:#facc15;border:none;padding:10px;border-radius:10px;width:100%}}
+.preview img,video{{width:100%;margin-top:10px;border-radius:10px}}
 </style>
+
+<div style="position:absolute;top:10px;right:20px">
+🌐 <a href="/set_lang/th">TH</a> | <a href="/set_lang/en">EN</a>
+</div>
 
 <div class="container">
 
@@ -153,8 +175,8 @@ button{{background:#facc15;border:none;padding:10px;border-radius:10px;width:100
 
 <div class="card">
 <form method="post" action="/save_token">
-<input name="token" value="{u["token"]}">
-<button>Save</button>
+<input name="token" value="{u["token"]}" placeholder="{t("token")}">
+<button>{t("save")}</button>
 </form>
 </div>
 
@@ -162,27 +184,31 @@ button{{background:#facc15;border:none;padding:10px;border-radius:10px;width:100
 <form method="post" action="/add_group">
 <input name="gid" placeholder="Group ID">
 <input name="name" placeholder="Name">
-<button>Add</button>
+<button>{t("add_group")}</button>
 </form>
 </div>
 
 <div class="card">
-<label><input type="checkbox" onclick="allg(this)"> ALL</label>
+<label><input type="checkbox" onclick="allg(this)"> {t("all")}</label>
 
 <form method="post" action="/send" enctype="multipart/form-data">
 
 {groups}
 
-<textarea name="msg"></textarea>
+<textarea name="msg" placeholder="{t("msg")}"></textarea>
+
 <input type="file" name="file" id="file">
-<button>Send</button>
+
+<div class="preview" id="preview"></div>
+
+<button>{t("send")}</button>
 
 </form>
 </div>
 
 {admin}
 
-<a href="/logout">Logout</a>
+<a href="/logout">{t("logout")}</a>
 
 </div>
 
@@ -191,10 +217,23 @@ function allg(s){{
 let c=document.getElementsByName("gid");
 for(let i=0;i<c.length;i++)c[i].checked=s.checked;
 }}
+
+document.getElementById("file").onchange = function(e){{
+let f=e.target.files[0];
+let p=document.getElementById("preview");
+p.innerHTML="";
+if(!f)return;
+let url=URL.createObjectURL(f);
+if(f.type.startsWith("image")){{
+p.innerHTML='<img src="'+url+'">';
+}}else{{
+p.innerHTML='<video controls src="'+url+'"></video>';
+}}
+}}
 </script>
 """
 
-# ---------- FIX DELETE ----------
+# ---------- DELETE GROUP ----------
 @app.route("/del_group/<gid>")
 def del_group(gid):
     d=load()
@@ -207,7 +246,7 @@ def del_group(gid):
     session["report"] = "🗑 ลบกลุ่มสำเร็จ"
     return redirect("/panel")
 
-# ---------- SEND FIX ----------
+# ---------- SEND ----------
 @app.route("/send", methods=["POST"])
 def send():
     d=load()
@@ -226,7 +265,6 @@ def send():
         try:
             if file and file.filename!="":
                 file.stream.seek(0)
-
                 requests.post(
                     f"https://api.telegram.org/bot{u['token']}/sendDocument",
                     data={"chat_id":g["id"],"caption":msg},
@@ -242,7 +280,7 @@ def send():
         except:
             fail+=1
 
-    session["report"]=f"✅ ส่งสำเร็จ {success} | ❌ ล้มเหลว {fail}"
+    session["report"]=f"✅ {success} | ❌ {fail}"
     return redirect("/panel")
 
 # ---------- OTHER ----------
