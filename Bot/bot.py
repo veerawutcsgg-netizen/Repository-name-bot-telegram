@@ -113,36 +113,17 @@ def panel():
         """
 
     admin=""
-if u["role"]=="admin":
-
-    user_list = ""
-    for uname, info in d["users"].items():
-        user_list += f"""
-        <div style="margin-bottom:10px">
-            <b>{uname}</b>
-            <form method="post" action="/edit_user" style="display:flex;gap:5px;margin-top:5px">
-                <input type="hidden" name="user" value="{uname}">
-                <input name="pass" placeholder="New Password">
-                <button>แก้รหัส</button>
-            </form>
+    if u["role"]=="admin":
+        admin=f"""
+        <div class="card">
+        <h3>{t("add_user")}</h3>
+        <form method="post" action="/add_user">
+        <input name="user">
+        <input name="pass">
+        <button>Add</button>
+        </form>
         </div>
         """
-
-    admin=f"""
-    <div class="card">
-    <h3>➕ เพิ่มยูส</h3>
-    <form method="post" action="/add_user">
-        <input name="user" placeholder="Username">
-        <input name="pass" placeholder="Password">
-        <button>Add</button>
-    </form>
-    </div>
-
-    <div class="card">
-    <h3>👥 รายการยูสทั้งหมด</h3>
-    {user_list}
-    </div>
-    """
 
     return f"""
 <style>
