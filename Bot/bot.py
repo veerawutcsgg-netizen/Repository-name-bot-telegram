@@ -4,15 +4,15 @@ import json, os, requests
 app = Flask(__name__)
 app.secret_key = "secret123"
 
-CONFIG_FILE = "Bot/config.json"
-UPLOAD = "uploads"
+BASE = os.path.dirname(os.path.abspath(__file__))
+CONFIG = os.path.join(BASE, "config.json")
+UPLOAD = os.path.join(BASE, "uploads")
 
-os.makedirs("Bot", exist_ok=True)
 os.makedirs(UPLOAD, exist_ok=True)
 
 # ---------- INIT ----------
-if not os.path.exists(CONFIG_FILE):
-    with open(CONFIG_FILE, "w") as f:
+if not os.path.exists(CONFIG):
+    with open(CONFIG, "w") as f:
         json.dump({
             "users":{
                 "admin":{
@@ -24,13 +24,11 @@ if not os.path.exists(CONFIG_FILE):
             }
         }, f, indent=2)
 
-def load_config():
-    with open(CONFIG_FILE) as f:
-        return json.load(f)
+def load():
+    return json.load(open(CONFIG))
 
-def save_config(d):
-    with open(CONFIG_FILE, "w") as f:
-        json.dump(d, f, indent=2)
+def save(d):
+    json.dump(d, open(CONFIG,"w"), indent=2)
 
 # ---------- LOGO ----------
 @app.route("/logo")
@@ -39,8 +37,18 @@ def logo():
 
 # ---------- LANG ----------
 TEXT = {
- "th":{"login":"เข้าสู่ระบบ","user":"ผู้ใช้","pass":"รหัสผ่าน","token":"โทเคน","save":"บันทึก","add_group":"เพิ่มกลุ่ม","send":"ส่งข้อความ","logout":"ออกจากระบบ","msg":"ข้อความ","add_user":"เพิ่มยูส"},
- "en":{"login":"Login","user":"User","pass":"Password","token":"Token","save":"Save","add_group":"Add Group","send":"Send","logout":"Logout","msg":"Message","add_user":"Add User"}
+ "th":{
+  "login":"เข้าสู่ระบบ","user":"ผู้ใช้","pass":"รหัสผ่าน","token":"โทเคน",
+  "save":"บันทึก","add_group":"เพิ่มกลุ่ม","send":"ส่งข้อความ",
+  "logout":"ออกจากระบบ","msg":"ข้อความ","add_user":"เพิ่มยูส",
+  "groups":"กลุ่ม","preview":"ตัวอย่าง"
+ },
+ "en":{
+  "login":"Login","user":"User","pass":"Password","token":"Token",
+  "save":"Save","add_group":"Add Group","send":"Send",
+  "logout":"Logout","msg":"Message","add_user":"Add User",
+  "groups":"Groups","preview":"Preview"
+ }
 }
 
 def t(k):
@@ -55,7 +63,7 @@ def set_lang(l):
 @app.route("/", methods=["GET","POST"])
 def login():
     if request.method=="POST":
-        d=load_config()
+        d=load()
         u=request.form["user"]
         p=request.form["password"]
         if u in d["users"] and d["users"][u]["password"]==p:
@@ -63,26 +71,26 @@ def login():
             return redirect("/panel")
 
     return f"""
-    <style>
-    body{{background:#020617;color:white;text-align:center;font-family:sans-serif}}
-    input{{padding:15px;width:260px;margin:10px;border-radius:10px}}
-    button{{padding:10px 30px;background:#facc15;border:none;border-radius:10px}}
-    </style>
+<style>
+body{{background:#020617;color:white;text-align:center;font-family:sans-serif}}
+input{{padding:15px;width:260px;margin:10px;border-radius:10px}}
+button{{padding:10px 30px;background:#facc15;border:none;border-radius:10px}}
+</style>
 
-    <div style="position:absolute;top:10px;right:20px">
-    <a href="/set_lang/th">TH</a> | <a href="/set_lang/en">EN</a>
-    </div>
+<div style="position:absolute;top:10px;right:20px">
+<a href="/set_lang/th">TH</a> | <a href="/set_lang/en">EN</a>
+</div>
 
-    <div style="margin-top:120px">
-    <img src="/logo" width=150>
-    <h2>Telegram Panel</h2>
-    <form method="post">
-    <input name="user" placeholder="{t("user")}"><br>
-    <input type="password" name="password" placeholder="{t("pass")}"><br>
-    <button>{t("login")}</button>
-    </form>
-    </div>
-    """
+<div style="margin-top:120px">
+<img src="/logo" width=150>
+<h2>Telegram Master Panel 🚀</h2>
+<form method="post">
+<input name="user" placeholder="{t("user")}"><br>
+<input type="password" name="password" placeholder="{t("pass")}"><br>
+<button>{t("login")}</button>
+</form>
+</div>
+"""
 
 # ---------- PANEL ----------
 @app.route("/panel")
@@ -90,13 +98,13 @@ def panel():
     if "user" not in session:
         return redirect("/")
 
-    d=load_config()
+    d=load()
     user=session["user"]
     u=d["users"][user]
 
-    group_html=""
+    groups=""
     for g in u["groups"]:
-        group_html+=f"""
+        groups+=f"""
         <div>
         <input type="checkbox" name="gid" value="{g["id"]}">
         {g["name"]}
@@ -104,9 +112,9 @@ def panel():
         </div>
         """
 
-    admin_html=""
+    admin=""
     if u["role"]=="admin":
-        admin_html=f"""
+        admin=f"""
         <div class="card">
         <h3>{t("add_user")}</h3>
         <form method="post" action="/add_user">
@@ -151,11 +159,12 @@ button{{background:#facc15;border:none;padding:10px;border-radius:10px;width:100
 </div>
 
 <div class="card">
+<h3>{t("groups")}</h3>
 <label><input type="checkbox" onclick="allg(this)"> ALL</label>
 
 <form method="post" action="/send" enctype="multipart/form-data">
 
-{group_html}
+{groups}
 
 <textarea name="msg" placeholder="{t("msg")}"></textarea>
 
@@ -164,89 +173,83 @@ button{{background:#facc15;border:none;padding:10px;border-radius:10px;width:100
 <div class="preview" id="preview"></div>
 
 <button>{t("send")}</button>
-
 </form>
 </div>
 
-{admin_html}
+{admin}
 
 <a href="/logout">{t("logout")}</a>
 
 </div>
 
 <script>
-function allg(s){
+function allg(s){{
 let c=document.getElementsByName("gid");
 for(let i=0;i<c.length;i++)c[i].checked=s.checked;
-}
+}}
 
-document.getElementById("file").onchange = function(e){
-let f = e.target.files[0];
-let p = document.getElementById("preview");
+document.getElementById("file").onchange = function(e){{
+let f=e.target.files[0];
+let p=document.getElementById("preview");
 p.innerHTML="";
-if(!f) return;
-
-let url = URL.createObjectURL(f);
-
-if(f.type.startsWith("image")){
-p.innerHTML = '<img src="' + url + '">';
-}else{
-p.innerHTML = '<video controls src="' + url + '"></video>';
-}
-}
+if(!f)return;
+let url=URL.createObjectURL(f);
+if(f.type.startsWith("image")){{
+p.innerHTML='<img src="'+url+'">';
+}}else{{
+p.innerHTML='<video controls src="'+url+'"></video>';
+}}
+}}
 </script>
 """
 
-# ---------- USER ----------
-@app.route("/add_user", methods=["POST"])
-def add_user():
-    d=load_config()
-    if d["users"][session["user"]]["role"]=="admin":
-        u=request.form["user"]
-        p=request.form["pass"]
-        d["users"][u]={"password":p,"role":"user","token":"","groups":[]}
-        save_config(d)
+# ---------- BACKEND ----------
+@app.route("/save_token", methods=["POST"])
+def save_token():
+    d=load()
+    d["users"][session["user"]]["token"]=request.form["token"]
+    save(d)
     return redirect("/panel")
 
-# ---------- GROUP ----------
 @app.route("/add_group", methods=["POST"])
 def add_group():
-    d=load_config()
+    d=load()
     d["users"][session["user"]]["groups"].append({
         "id":request.form["gid"],
         "name":request.form["name"]
     })
-    save_config(d)
+    save(d)
     return redirect("/panel")
 
 @app.route("/del_group/<gid>")
 def del_group(gid):
-    d=load_config()
+    d=load()
     u=session["user"]
     d["users"][u]["groups"]=[g for g in d["users"][u]["groups"] if g["id"]!=gid]
-    save_config(d)
+    save(d)
     return redirect("/panel")
 
-# ---------- TOKEN ----------
-@app.route("/save_token", methods=["POST"])
-def save_token():
-    d=load_config()
-    d["users"][session["user"]]["token"]=request.form["token"]
-    save_config(d)
+@app.route("/add_user", methods=["POST"])
+def add_user():
+    d=load()
+    if d["users"][session["user"]]["role"]=="admin":
+        u=request.form["user"]
+        p=request.form["pass"]
+        d["users"][u]={"password":p,"role":"user","token":"","groups":[]}
+        save(d)
     return redirect("/panel")
 
-# ---------- SEND ----------
 @app.route("/send", methods=["POST"])
 def send():
-    d=load_config()
+    d=load()
     u=d["users"][session["user"]]
 
-    selected=request.form.getlist("gid")
+    gids=request.form.getlist("gid")
     msg=request.form["msg"]
     file=request.files.get("file")
 
     for g in u["groups"]:
-        if g["id"] not in selected: continue
+        if g["id"] not in gids: continue
         try:
             if file:
                 path=os.path.join(UPLOAD,file.filename)
@@ -266,7 +269,6 @@ def send():
 
     return redirect("/panel")
 
-# ---------- LOGOUT ----------
 @app.route("/logout")
 def logout():
     session.clear()
