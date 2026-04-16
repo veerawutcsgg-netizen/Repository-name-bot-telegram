@@ -6,6 +6,7 @@ app.secret_key = "secret123"
 
 CONFIG_FILE = "Bot/config.json"
 UPLOAD = "uploads"
+
 os.makedirs("Bot", exist_ok=True)
 os.makedirs(UPLOAD, exist_ok=True)
 
@@ -94,7 +95,7 @@ def panel():
     group_html=""
     for g in u["groups"]:
         group_html+=f"""
-        <div class="g">
+        <div>
         <input type="checkbox" name="gid" value="{g["id"]}">
         {g["name"]}
         <a href="/del_group/{g["id"]}">❌</a>
@@ -121,7 +122,6 @@ body{{background:#000;color:white;font-family:sans-serif}}
 .card{{background:#111;padding:15px;margin:10px;border-radius:15px}}
 input,textarea{{width:100%;padding:12px;margin:5px;border-radius:10px}}
 button{{background:#facc15;border:none;padding:10px;border-radius:10px;width:100%}}
-.drop{{border:2px dashed #555;padding:20px;text-align:center;border-radius:10px}}
 .preview img,video{{width:100%;margin-top:10px;border-radius:10px}}
 </style>
 
@@ -157,8 +157,7 @@ button{{background:#facc15;border:none;padding:10px;border-radius:10px;width:100
 
 <textarea name="msg" placeholder="{t("msg")}"></textarea>
 
-<div class="drop" id="drop">Drag & Drop</div>
-<input type="file" name="file" id="file" hidden>
+<input type="file" name="file" id="file">
 
 <div class="preview" id="preview"></div>
 
@@ -174,35 +173,25 @@ button{{background:#facc15;border:none;padding:10px;border-radius:10px;width:100
 </div>
 
 <script>
-function allg(s){{
+function allg(s){
 let c=document.getElementsByName("gid");
 for(let i=0;i<c.length;i++)c[i].checked=s.checked;
-}}
+}
 
-let drop=document.getElementById("drop");
-let file=document.getElementById("file");
-let preview=document.getElementById("preview");
+document.getElementById("file").onchange = function(e){
+let f = e.target.files[0];
+let p = document.getElementById("preview");
+p.innerHTML="";
+if(!f) return;
 
-drop.onclick=()=>file.click();
+let url = URL.createObjectURL(f);
 
-drop.ondrop=e=>{
-e.preventDefault();
-file.files=e.dataTransfer.files;
-show(file.files[0]);
-};
-
-drop.ondragover=e=>e.preventDefault();
-
-file.onchange=()=>show(file.files[0]);
-
-function show(f){{
-preview.innerHTML="";
-if(!f)return;
-if(f.type.startsWith("image"))
-preview.innerHTML=`<img src="${{URL.createObjectURL(f)}}">`;
-else
-preview.innerHTML=`<video controls src="${{URL.createObjectURL(f)}}"></video>`;
-}}
+if(f.type.startsWith("image")){
+p.innerHTML = '<img src="' + url + '">';
+}else{
+p.innerHTML = '<video controls src="' + url + '"></video>';
+}
+}
 </script>
 """
 
@@ -254,8 +243,6 @@ def send():
     msg=request.form["msg"]
     file=request.files.get("file")
 
-    success=0
-
     for g in u["groups"]:
         if g["id"] not in selected: continue
         try:
@@ -272,8 +259,8 @@ def send():
                     f"https://api.telegram.org/bot{u['token']}/sendMessage",
                     data={"chat_id":g["id"],"text":msg}
                 )
-            success+=1
-        except: pass
+        except:
+            pass
 
     return redirect("/panel")
 
