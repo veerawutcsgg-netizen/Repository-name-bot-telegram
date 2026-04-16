@@ -25,10 +25,12 @@ if not os.path.exists(CONFIG_FILE):
         }, f, indent=2)
 
 def load_config():
-    return json.load(open(CONFIG_FILE))
+    with open(CONFIG_FILE) as f:
+        return json.load(f)
 
 def save_config(d):
-    json.dump(d, open(CONFIG_FILE,"w"), indent=2)
+    with open(CONFIG_FILE, "w") as f:
+        json.dump(d, f, indent=2)
 
 # ---------- LOGO ----------
 @app.route("/logo")
