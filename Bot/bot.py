@@ -8,7 +8,7 @@ CONFIG_FILE = "Bot/config.json"
 UPLOAD_FOLDER = "Bot/uploads"
 os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 
-# ---------------- CONFIG ---------------- #
+# -------- CONFIG -------- #
 def load_config():
     if not os.path.exists(CONFIG_FILE):
         return {"users": {}}
@@ -19,45 +19,7 @@ def save_config(data):
     with open(CONFIG_FILE, "w") as f:
         json.dump(data, f, indent=2)
 
-# ---------------- LANG ---------------- #
-LANG = {
-    "th": {
-        "login": "เข้าสู่ระบบ",
-        "user": "ผู้ใช้",
-        "pass": "รหัสผ่าน",
-        "token": "โทเคนบอท",
-        "save": "บันทึก",
-        "add_group": "เพิ่มกลุ่ม",
-        "group_id": "ไอดีกลุ่ม",
-        "group_name": "ชื่อกลุ่ม",
-        "send": "ส่งข้อความ",
-        "logout": "ออกจากระบบ",
-        "add_user": "เพิ่มยูส",
-        "change_pass": "เปลี่ยนรหัส",
-        "success": "ส่งสำเร็จ"
-    },
-    "en": {
-        "login": "Login",
-        "user": "User",
-        "pass": "Password",
-        "token": "Bot Token",
-        "save": "Save",
-        "add_group": "Add Group",
-        "group_id": "Group ID",
-        "group_name": "Group Name",
-        "send": "Send",
-        "logout": "Logout",
-        "add_user": "Add User",
-        "change_pass": "Change Password",
-        "success": "Success"
-    }
-}
-
-def t(key):
-    lang = session.get("lang", "th")
-    return LANG[lang][key]
-
-# ---------------- LOGIN ---------------- #
+# -------- LOGIN -------- #
 @app.route("/", methods=["GET","POST"])
 def login():
     if request.method == "POST":
@@ -70,31 +32,24 @@ def login():
             return redirect("/panel")
         return "❌ Login failed"
 
-    return f"""
+    return """
     <style>
-    body {{background:#020617;color:white;text-align:center;font-family:sans-serif}}
-    .box {{margin-top:100px}}
-    input {{padding:15px;width:300px;margin:10px;border-radius:10px}}
-    button {{padding:15px 30px;background:#facc15;border:none;border-radius:10px}}
+    body{background:#020617;color:white;text-align:center;font-family:sans-serif}
+    .box{margin-top:120px}
+    input{padding:15px;width:300px;margin:10px;border-radius:10px}
+    button{padding:15px 30px;background:#facc15;border:none;border-radius:10px}
     </style>
     <div class='box'>
         <h1>🚀 Telegram Master Panel</h1>
         <form method='post'>
-            <input name='user' placeholder='{t("user")}'><br>
-            <input name='password' placeholder='{t("pass")}' type='password'><br>
-            <button>{t("login")}</button>
+            <input name='user' placeholder='User'><br>
+            <input name='password' type='password' placeholder='Password'><br>
+            <button>Login</button>
         </form>
-        <br>
-        <a href="/lang/th">TH</a> | <a href="/lang/en">EN</a>
     </div>
     """
 
-@app.route("/lang/<l>")
-def set_lang(l):
-    session["lang"] = l
-    return redirect("/")
-
-# ---------------- PANEL ---------------- #
+# -------- PANEL -------- #
 @app.route("/panel")
 def panel():
     if "user" not in session:
@@ -102,6 +57,7 @@ def panel():
 
     data = load_config()
     u = data["users"][session["user"]]
+    report = session.pop("report", "")
 
     groups_html = ""
     for g in u["groups"]:
@@ -115,43 +71,64 @@ def panel():
 
     admin_html = ""
     if u["role"] == "admin":
+        user_list = ""
+        for name in data["users"]:
+            if name == "admin": continue
+            user_list += f"""
+            <div style='margin:10px;background:#111;padding:10px;border-radius:10px'>
+                👤 {name}
+                <form method='post' action='/change_pass' style='display:inline'>
+                    <input type='hidden' name='user' value='{name}'>
+                    <input name='newpass' placeholder='New Password'>
+                    <button>🔑</button>
+                </form>
+                <a href='/del_user/{name}' style='color:red'>❌</a>
+            </div>
+            """
+
         admin_html = f"""
-        <h3>{t("add_user")}</h3>
+        <h3>👑 Admin Panel</h3>
+
         <form method='post' action='/add_user'>
-            <input name='user'>
-            <input name='pass'>
+            <input name='user' placeholder='Username'>
+            <input name='pass' placeholder='Password'>
             <button>Add</button>
         </form>
+
+        <h4>Users ({len(data["users"])-1})</h4>
+        {user_list}
         """
 
     return f"""
     <style>
-    body {{background:#020617;color:white;font-family:sans-serif;padding:20px}}
-    input,textarea {{width:100%;padding:10px;margin:5px;border-radius:10px}}
-    button {{background:#facc15;border:none;padding:10px;border-radius:10px}}
+    body{{background:#020617;color:white;font-family:sans-serif;padding:20px}}
+    input,textarea{{width:100%;padding:10px;margin:5px;border-radius:10px}}
+    button{{background:#facc15;border:none;padding:10px;border-radius:10px}}
     </style>
 
     <h2>👑 USER: {session["user"]}</h2>
 
+    {f"<div style='color:lime'>{report}</div>" if report else ""}
+
     <form method='post' action='/save_token'>
-        <h3>{t("token")}</h3>
+        <h3>🔑 Token</h3>
         <input name='token' value='{u["token"]}'>
-        <button>{t("save")}</button>
+        <button>Save</button>
     </form>
 
-    <h3>{t("add_group")}</h3>
+    <h3>➕ Add Group</h3>
     <form method='post' action='/add_group'>
-        <input name='gid' placeholder='ID'>
-        <input name='name' placeholder='Name'>
+        <input name='gid' placeholder='Group ID'>
+        <input name='name' placeholder='Group Name'>
         <button>Add</button>
     </form>
 
-    <h3>Groups</h3>
+    <h3>📋 Groups</h3>
     <input type='checkbox' onclick='toggle(this)'> ALL
     {groups_html}
 
     <form method='post' action='/send' enctype='multipart/form-data'>
-        <h3>{t("send")}</h3>
+        <h3>📤 Send</h3>
         <textarea name='msg'></textarea>
         <input type='file' name='file'>
         <button>Send</button>
@@ -159,10 +136,10 @@ def panel():
 
     {admin_html}
 
-    <br><a href='/logout'>{t("logout")}</a>
+    <br><a href='/logout'>Logout</a>
 
     <script>
-    function toggle(source) {{
+    function toggle(source){{
         checkboxes = document.getElementsByName('gid');
         for(var i=0;i<checkboxes.length;i++)
             checkboxes[i].checked = source.checked;
@@ -170,7 +147,7 @@ def panel():
     </script>
     """
 
-# ---------------- SAVE TOKEN ---------------- #
+# -------- TOKEN -------- #
 @app.route("/save_token", methods=["POST"])
 def save_token():
     data = load_config()
@@ -179,7 +156,7 @@ def save_token():
     save_config(data)
     return redirect("/panel")
 
-# ---------------- GROUP ---------------- #
+# -------- GROUP -------- #
 @app.route("/add_group", methods=["POST"])
 def add_group():
     data = load_config()
@@ -199,7 +176,7 @@ def del_group(gid):
     save_config(data)
     return redirect("/panel")
 
-# ---------------- SEND ---------------- #
+# -------- SEND -------- #
 @app.route("/send", methods=["POST"])
 def send():
     data = load_config()
@@ -216,7 +193,6 @@ def send():
             if file:
                 path = os.path.join(UPLOAD_FOLDER, file.filename)
                 file.save(path)
-
                 requests.post(
                     f"https://api.telegram.org/bot{token}/sendDocument",
                     data={"chat_id": g["id"], "caption": msg},
@@ -231,9 +207,10 @@ def send():
         except:
             pass
 
-    return f"✅ ส่งสำเร็จ {success} กลุ่ม"
+    session["report"] = f"✅ ส่งสำเร็จ {success} กลุ่ม"
+    return redirect("/panel")
 
-# ---------------- ADMIN ---------------- #
+# -------- ADMIN -------- #
 @app.route("/add_user", methods=["POST"])
 def add_user():
     data = load_config()
@@ -249,13 +226,35 @@ def add_user():
     save_config(data)
     return redirect("/panel")
 
-# ---------------- LOGOUT ---------------- #
+@app.route("/change_pass", methods=["POST"])
+def change_pass():
+    data = load_config()
+    if data["users"][session["user"]]["role"] != "admin":
+        return "No permission"
+
+    data["users"][request.form["user"]]["password"] = request.form["newpass"]
+    save_config(data)
+    return redirect("/panel")
+
+@app.route("/del_user/<u>")
+def del_user(u):
+    data = load_config()
+    if data["users"][session["user"]]["role"] != "admin":
+        return "No permission"
+
+    if u != "admin":
+        data["users"].pop(u, None)
+
+    save_config(data)
+    return redirect("/panel")
+
+# -------- LOGOUT -------- #
 @app.route("/logout")
 def logout():
     session.clear()
     return redirect("/")
 
-# ---------------- RUN ---------------- #
+# -------- RUN -------- #
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 5000))
     app.run(host="0.0.0.0", port=port)
