@@ -33,7 +33,7 @@ def save(d):
 # ---------- LOGO ----------
 @app.route("/logo")
 def logo():
-    return send_from_directory(".", "logo.png")
+    return send_from_directory(BASE, "logo.png")
 
 # ---------- LANG ----------
 TEXT = {
@@ -41,13 +41,13 @@ TEXT = {
   "login":"เข้าสู่ระบบ","user":"ผู้ใช้","pass":"รหัสผ่าน","token":"โทเคน",
   "save":"บันทึก","add_group":"เพิ่มกลุ่ม","send":"ส่งข้อความ",
   "logout":"ออกจากระบบ","msg":"ข้อความ","add_user":"เพิ่มยูส",
-  "groups":"กลุ่ม","preview":"ตัวอย่าง"
+  "users":"รายการยูส"
  },
  "en":{
   "login":"Login","user":"User","pass":"Password","token":"Token",
   "save":"Save","add_group":"Add Group","send":"Send",
   "logout":"Logout","msg":"Message","add_user":"Add User",
-  "groups":"Groups","preview":"Preview"
+  "users":"User List"
  }
 }
 
@@ -71,26 +71,26 @@ def login():
             return redirect("/panel")
 
     return f"""
-<style>
-body{{background:#020617;color:white;text-align:center;font-family:sans-serif}}
-input{{padding:15px;width:260px;margin:10px;border-radius:10px}}
-button{{padding:10px 30px;background:#facc15;border:none;border-radius:10px}}
-</style>
+    <style>
+    body{{background:#020617;color:white;text-align:center;font-family:sans-serif}}
+    input{{padding:15px;width:260px;margin:10px;border-radius:10px}}
+    button{{padding:10px 30px;background:#facc15;border:none;border-radius:10px}}
+    </style>
 
-<div style="position:absolute;top:10px;right:20px">
-<a href="/set_lang/th">TH</a> | <a href="/set_lang/en">EN</a>
-</div>
+    <div style="position:absolute;top:10px;right:20px">
+    <a href="/set_lang/th">TH</a> | <a href="/set_lang/en">EN</a>
+    </div>
 
-<div style="margin-top:120px">
-<img src="/logo" width=150>
-<h2>Telegram Master Panel 🚀</h2>
-<form method="post">
-<input name="user" placeholder="{t("user")}"><br>
-<input type="password" name="password" placeholder="{t("pass")}"><br>
-<button>{t("login")}</button>
-</form>
-</div>
-"""
+    <div style="margin-top:120px">
+    <img src="/logo" width=150>
+    <h2>Telegram Panel</h2>
+    <form method="post">
+    <input name="user" placeholder="{t("user")}"><br>
+    <input type="password" name="password" placeholder="{t("pass")}"><br>
+    <button>{t("login")}</button>
+    </form>
+    </div>
+    """
 
 # ---------- PANEL ----------
 @app.route("/panel")
@@ -102,6 +102,7 @@ def panel():
     user=session["user"]
     u=d["users"][user]
 
+    # groups
     groups=""
     for g in u["groups"]:
         groups+=f"""
@@ -112,16 +113,36 @@ def panel():
         </div>
         """
 
+    # admin users list
     admin=""
     if u["role"]=="admin":
+
+        user_list=""
+        for uname,info in d["users"].items():
+            user_list+=f"""
+            <div style="margin-bottom:10px">
+                <b>{uname}</b>
+                <form method="post" action="/edit_user" style="display:flex;gap:5px;margin-top:5px">
+                    <input type="hidden" name="user" value="{uname}">
+                    <input name="pass" placeholder="New Password">
+                    <button>แก้รหัส</button>
+                </form>
+            </div>
+            """
+
         admin=f"""
         <div class="card">
-        <h3>{t("add_user")}</h3>
+        <h3>➕ {t("add_user")}</h3>
         <form method="post" action="/add_user">
-        <input name="user">
-        <input name="pass">
-        <button>Add</button>
+            <input name="user" placeholder="Username">
+            <input name="pass" placeholder="Password">
+            <button>Add</button>
         </form>
+        </div>
+
+        <div class="card">
+        <h3>👥 {t("users")}</h3>
+        {user_list}
         </div>
         """
 
@@ -159,11 +180,9 @@ button{{background:#facc15;border:none;padding:10px;border-radius:10px;width:100
 </div>
 
 <div class="card">
-<h3>{t("groups")}</h3>
 <label><input type="checkbox" onclick="allg(this)"> ALL</label>
 
 <form method="post" action="/send" enctype="multipart/form-data">
-
 {groups}
 
 <textarea name="msg" placeholder="{t("msg")}"></textarea>
@@ -237,6 +256,17 @@ def add_user():
         p=request.form["pass"]
         d["users"][u]={"password":p,"role":"user","token":"","groups":[]}
         save(d)
+    return redirect("/panel")
+
+@app.route("/edit_user", methods=["POST"])
+def edit_user():
+    d=load()
+    if d["users"][session["user"]]["role"]=="admin":
+        u=request.form["user"]
+        p=request.form["pass"]
+        if u in d["users"]:
+            d["users"][u]["password"]=p
+            save(d)
     return redirect("/panel")
 
 @app.route("/send", methods=["POST"])
