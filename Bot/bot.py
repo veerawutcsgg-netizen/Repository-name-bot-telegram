@@ -10,7 +10,7 @@ CONFIG_FILE = "Bot/config.json"
 # ---------------- LOGO ROUTE ----------------
 @app.route("/logo")
 def logo():
-    return send_from_directory("Bot", "logo.png")
+    return send_from_directory(".", "logo.png")
 
 # ---------------- CONFIG ----------------
 def load_config():
